@@ -1,0 +1,370 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OPERATION: SURABAYA — Player Portal</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="ambient"></div>
+
+  <header class="topbar">
+    <a class="brand" href="#">
+      <span class="brand-mark">F</span>
+      <span>
+        OPERATION: <span class="muted">SURABAYA</span>
+        <small>REAL WORLD TACTICAL SYSTEM</small>
+      </span>
+    </a>
+
+    <div class="top-right">
+      <span class="connection"><i></i> CLIENT READY</span>
+      <span class="avatar">P</span>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">PLAYER PORTAL / 01</p>
+        <h1>ENTER THE<br><em>FIELD.</em></h1>
+        <p class="sub">
+          Satu portal untuk autentikasi, koordinasi tim, dan memulai operasi.
+        </p>
+      </div>
+
+      <div class="hero-code">
+        <span>OPERATION STATUS</span>
+        <strong id="operationStatus">STANDBY</strong>
+        <small>WAITING FOR ADMIN</small>
+      </div>
+    </section>
+
+    <!-- AUTHENTICATION -->
+    <section id="loginPanel" class="panel login-panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">IDENTITY CHECK</p>
+          <h2 id="authTitle">Player login</h2>
+        </div>
+        <span class="step">01 / 03</span>
+      </div>
+
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab active" id="showLogin">
+          LOGIN
+        </button>
+        <button type="button" class="auth-tab" id="showRegister">
+          REGISTER
+        </button>
+      </div>
+
+      <div class="login-grid">
+        <div class="scan-box">
+          <div class="scan-corners"></div>
+          <div class="face-icon">◉</div>
+          <div class="scan-line"></div>
+          <span>PLAYER IDENTITY MODULE</span>
+          <small>
+            Secure account authentication module.
+            Face Recognition dapat diintegrasikan kemudian.
+          </small>
+        </div>
+
+        <div class="form-area">
+
+          <!-- LOGIN FORM -->
+          <div id="loginFields">
+            <label for="loginEmail">EMAIL</label>
+            <input
+              id="loginEmail"
+              type="email"
+              placeholder="nama@email.com"
+              autocomplete="email"
+            >
+
+            <label for="loginPassword">PASSWORD</label>
+            <div class="password-wrap">
+              <input
+                id="loginPassword"
+                type="password"
+                placeholder="Masukkan password"
+                autocomplete="current-password"
+              >
+              <button
+                type="button"
+                class="password-toggle"
+                id="toggleLoginPassword"
+              >SHOW</button>
+            </div>
+
+            <button class="btn primary" id="loginBtn">
+              LOGIN & CONTINUE <b>↗</b>
+            </button>
+
+            <p class="hint" id="loginHint">
+              Masukkan email dan password akunmu.
+            </p>
+          </div>
+
+          <!-- REGISTER FORM -->
+          <div id="registerFields" class="hidden">
+            <label for="playerName">USERNAME</label>
+            <input
+              id="playerName"
+              placeholder="Contoh: player001"
+              autocomplete="username"
+            >
+
+            <label for="fullName">NAMA LENGKAP</label>
+            <input
+              id="fullName"
+              placeholder="Masukkan nama lengkap"
+              autocomplete="name"
+            >
+
+            <label for="playerEmail">EMAIL</label>
+            <input
+              id="playerEmail"
+              type="email"
+              placeholder="nama@email.com"
+              autocomplete="email"
+            >
+
+            <label for="registerPassword">PASSWORD</label>
+            <div class="password-wrap">
+              <input
+                id="registerPassword"
+                type="password"
+                placeholder="Minimal 8 karakter"
+                autocomplete="new-password"
+              >
+              <button
+                type="button"
+                class="password-toggle"
+                id="toggleRegisterPassword"
+              >SHOW</button>
+            </div>
+
+            <button class="btn primary" id="registerBtn">
+              CREATE ACCOUNT <b>↗</b>
+            </button>
+
+            <p class="hint" id="registerHint">
+              Buat akun pemain untuk bergabung dalam operasi.
+            </p>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- TEAM SELECTION -->
+    <section id="teamPanel" class="panel hidden">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">SQUAD ASSIGNMENT</p>
+          <h2>Choose your side</h2>
+        </div>
+        <span class="step">02 / 03</span>
+      </div>
+
+      <p class="welcome-line" id="welcomeText"></p>
+
+      <div class="teams">
+        <button class="team-card red" data-team="RED">
+          <span class="team-symbol">R</span>
+          <span>
+            <small>FACTION 01</small>
+            <strong>RED TEAM</strong>
+            <em>IRON / ATTACK</em>
+          </span>
+          <b>↗</b>
+        </button>
+
+        <button class="team-card blue" data-team="BLUE">
+          <span class="team-symbol">B</span>
+          <span>
+            <small>FACTION 02</small>
+            <strong>BLUE TEAM</strong>
+            <em>STEEL / DEFENSE</em>
+          </span>
+          <b>↗</b>
+        </button>
+      </div>
+
+      <p class="hint" id="teamHint">
+        Pilih satu tim untuk melanjutkan ke waiting lobby.
+      </p>
+    </section>
+
+    <!-- WAITING LOBBY -->
+    <section id="lobbyPanel" class="panel hidden">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">DEPLOYMENT LOBBY</p>
+          <h2>Waiting for deployment</h2>
+        </div>
+        <span class="step">03 / 03</span>
+      </div>
+
+      <div class="lobby-grid">
+        <div>
+          <small class="muted">YOUR ASSIGNMENT</small>
+          <div class="assignment" id="assignment">—</div>
+          <p id="lobbyWelcome">Pemain</p>
+        </div>
+
+        <div class="lobby-status">
+          <span class="pulse"></span>
+          <strong id="lobbyState">WAITING</strong>
+          <small>Admin belum memulai pertandingan.</small>
+        </div>
+      </div>
+
+      <div class="lobby-teams">
+
+      <!-- RED TEAM -->
+      <div class="lobby-team red">
+        <div class="lobby-team-head">
+          <h3>RED TEAM</h3>
+          <span id="redTeamCount">0 PLAYERS</span>
+        </div>
+
+        <div class="team-table-wrapper">
+          <table class="team-table">
+            <thead>
+              <tr>
+                <th>NO.</th>
+                <th>PLAYER NAME</th>
+                <th>STATUS</th>
+              </tr>
+            </thead>
+            <tbody id="redTeamPlayers">
+              <tr>
+                <td colspan="3" class="empty-team">
+                  Belum ada pemain.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- BLUE TEAM -->
+      <div class="lobby-team blue">
+        <div class="lobby-team-head">
+          <h3>BLUE TEAM</h3>
+          <span id="blueTeamCount">0 PLAYERS</span>
+        </div>
+
+        <div class="team-table-wrapper">
+          <table class="team-table">
+            <thead>
+              <tr>
+                <th>NO.</th>
+                <th>PLAYER NAME</th>
+                <th>STATUS</th>
+              </tr>
+            </thead>
+            <tbody id="blueTeamPlayers">
+              <tr>
+                <td colspan="3" class="empty-team">
+                  Belum ada pemain.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+</div>
+      <p class="hint" id="lobbyHint"></p>
+
+      <div class="lobby-bottom">
+  <span>PLAYER STATUS <b>CONNECTED</b></span>
+
+      <div class="lobby-actions">
+        <button class="btn outline" id="leaveTeamBtn">LEAVE TEAM</button>
+        <button class="btn outline" id="leaveBtn">LOG OUT</button>
+      </div>
+    </div>
+    </section>
+
+
+    <!-- GAMEPLAY CAMERA -->
+    <section id="gameplayPanel" class="gameplay-panel hidden">
+      <div class="gameplay-topbar">
+        <div>
+          <p class="eyebrow">LIVE OPERATION</p>
+          <strong id="gameplayMatchName">OPERATION: SURABAYA</strong>
+          <small id="gameplayPlayerInfo">PLAYER · TEAM</small>
+        </div>
+        <span id="cameraStatus" class="camera-status">CAMERA STANDBY</span>
+      </div>
+
+      <div class="camera-stage">
+        <video id="gameplayCamera" autoplay playsinline muted></video>
+        <div id="cameraPlaceholder" class="camera-placeholder">
+          <div class="camera-symbol">◉</div>
+          <strong>KAMERA BELUM AKTIF</strong>
+          <p id="cameraMessage">Izinkan akses kamera untuk masuk ke area permainan.</p>
+          <button type="button" id="enableCameraBtn" class="camera-action">AKTIFKAN KAMERA</button>
+        </div>
+        <div class="camera-overlay">
+          <span class="camera-live"><i></i> LIVE CAMERA</span>
+          <span id="gameplayTeamBadge" class="team-badge">TEAM</span>
+        </div>
+        <!-- PLAYER HEALTH HUD -->
+        <div class="gameplay-health">
+            <div class="health-info">
+                <span>PLAYER HEALTH</span>
+                <strong id="gameplayHealthText">100 / 100 HP</strong>
+            </div>
+
+            <div class="health-bar">
+                <div id="gameplayHealthFill" class="health-fill"></div>
+            </div>
+
+            <span id="gameplayHealthStatus" class="health-status">
+                ALIVE
+            </span>
+        </div>
+      </div>
+
+      <!-- PLAYER ELIMINATED OVERLAY -->
+      <div id="eliminatedOverlay" class="eliminated-overlay hidden">
+          <div class="eliminated-content">
+              <span class="eliminated-tag">OPERATION TERMINATED</span>
+              <h1>YOU ARE ELIMINATED</h1>
+              <p>YOUR HEALTH HAS REACHED ZERO</p>
+              <div class="eliminated-line"></div>
+              <span class="eliminated-status">PLAYER STATUS: ELIMINATED</span>
+          </div>
+      </div>
+      
+      <div class="gameplay-controls">
+          <button type="button" id="shootBtn" class="shoot-button">
+              <span class="shoot-icon">◎</span>
+              <span class="shoot-label">FIRE</span>
+          </button>
+      </div>
+      <div class="gameplay-footer">
+        <span>OPERATION STATUS <b id="gameplayStatus">ACTIVE</b></span>
+        <button type="button" id="gameplayLogoutBtn" class="camera-logout">LOG OUT</button>
+      </div>
+    </section>
+
+    <footer>
+      <span>FIELD OPS © 2026</span>
+      <span>PLAYER PORTAL · BUILD 0.3</span>
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
