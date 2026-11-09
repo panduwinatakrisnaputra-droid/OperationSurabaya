@@ -1,0 +1,200 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OPERATION: SURABAYA — Command Center</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <aside class="sidebar">
+        <a class="brand" href="#">
+            <span class="brand-mark">F</span>
+            <span>
+                OPERATION: <span class="muted">SURABAYA</span>
+                <small>COMMAND CENTER</small>
+            </span>
+        </a>
+
+        <div class="nav-label">OPERATIONS</div>
+        <a class="nav active" href="#overview">▦ <span>Overview</span></a>
+        <a class="nav" href="#map">⌖ <span>Live Map</span></a>
+        <a class="nav" href="#analytics">◫ <span>Player Analytics</span></a>
+        <a class="nav" href="#logs">≡ <span>Event Log</span></a>
+
+        <div class="side-bottom">
+            <span class="admin-dot"></span>
+            <div>
+                <b>ADMIN CONSOLE</b>
+                <small>LOCAL INTERFACE</small>
+            </div>
+        </div>
+    </aside>
+
+    <main class="main">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">TACTICAL MONITORING / COMMAND</p>
+                <h1>COMMAND CENTER</h1>
+            </div>
+
+            <div class="top-actions">
+                <span class="live-tag"><i></i> SYSTEM ONLINE</span>
+                <span class="date">FIELD OPS · 2026</span>
+            </div>
+        </header>
+
+        <section class="control-strip">
+            <div>
+                <small>MISSION CONTROL</small>
+                <strong id="matchState">NO ACTIVE MATCH</strong>
+            </div>
+
+            <div class="control-buttons">
+                <button class="btn start" id="startBtn">▶ START MATCH</button>
+                <button class="btn stop" id="stopBtn" disabled>■ END MATCH</button>
+                <button class="btn clear-log" id="deleteAllBtn">⌫ HAPUS ALL</button>
+            </div>
+        </section>
+
+        <section class="overview" id="overview">
+
+            <div class="team-panel red">
+                <div class="team-title">
+                    <span>R</span>
+                    <div>
+                        <small>FACTION 01</small>
+                        <h2>RED TEAM</h2>
+                    </div>
+                    <b id="redCount">0 PLAYERS</b>
+                </div>
+
+                <div class="empty">Belum ada pemain terhubung</div>
+                <div id="redPlayers"></div>
+            </div>
+
+            <div class="map-panel" id="map">
+                <div class="panel-head">
+                    <div>
+                        <small>ARENA INTELLIGENCE</small>
+                        <h2>LIVE FIELD MAP</h2>
+                    </div>
+                    <span class="map-status">AWAITING DATA</span>
+                </div>
+
+                <div class="map-placeholder">
+                    <div class="grid-lines"></div>
+                    <div class="map-cross">⌖</div>
+                    <div class="map-center">
+                        MAP DATA NOT CONNECTED
+                        <small>Integrasi Leaflet / OpenStreetMap</small>
+                    </div>
+                    <span class="coord c1">LAT — / LNG —</span>
+                    <span class="coord c2">ZONE 00</span>
+                </div>
+
+                <div class="map-foot">
+                    <span>PLAYER TRACKING <b>INACTIVE</b></span>
+                    <span>BASE STATUS <b>UNKNOWN</b></span>
+                </div>
+            </div>
+
+            <div class="team-panel blue">
+                <div class="team-title">
+                    <span>B</span>
+                    <div>
+                        <small>FACTION 02</small>
+                        <h2>BLUE TEAM</h2>
+                    </div>
+                    <b id="blueCount">0 PLAYERS</b>
+                </div>
+
+                <div class="empty">Belum ada pemain terhubung</div>
+                <div id="bluePlayers"></div>
+            </div>
+
+        </section>
+
+        <section class="lower-grid">
+
+            <div class="panel analytics" id="analytics">
+                <div class="panel-head">
+                    <div>
+                        <small>PERFORMANCE INTELLIGENCE</small>
+                        <h2>PLAYER ANALYTICS</h2>
+                    </div>
+                    <span class="muted-tag" id="analyticsStatus">WAITING DATA</span>
+                </div>
+
+                <div id="playerAnalyticsList" class="player-analytics-list">
+                    <div class="chart-empty">
+                        Statistik pemain akan muncul setelah data pertandingan diterima.
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel logs" id="logs">
+                <div class="panel-head">
+                    <div>
+                        <small>LIVE ACTIVITY STREAM</small>
+                        <h2>EVENT LOG</h2>
+                    </div>
+
+                    <div class="log-actions">
+                        <span class="muted-tag">0 EVENTS</span>
+                        <button class="btn clear-log" id="clearLogBtn" disabled>
+                            CLEAR LOG
+                        </button>
+                    </div>
+                </div>
+
+                <div class="log-empty">
+                    Belum ada aktivitas pertandingan.
+                </div>
+
+                <div id="logList"></div>
+            </div>
+
+        </section>
+
+        <section class="system-row">
+            <div>
+                <span class="sys-icon">◎</span>
+                <span>
+                    <b>AI PROCESSING</b>
+                    <small>Menunggu koneksi service AI</small>
+                </span>
+                <em>NOT CONNECTED</em>
+            </div>
+
+            <div>
+                <span class="sys-icon">▣</span>
+                <span>
+                    <b>CAMERA MONITOR</b>
+                    <small>Belum ada stream kamera</small>
+                </span>
+                <em>0 SOURCES</em>
+            </div>
+
+            <div>
+                <span class="sys-icon">◈</span>
+                <span>
+                    <b>DATABASE</b>
+                    <small>Supabase belum dikonfigurasi</small>
+                </span>
+                <em>NOT CONNECTED</em>
+            </div>
+        </section>
+
+        <footer>
+            FIELD OPS COMMAND CENTER
+            <span>ADMIN DASHBOARD · BUILD 0.1</span>
+        </footer>
+
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
