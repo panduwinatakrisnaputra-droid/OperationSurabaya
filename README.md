@@ -1,65 +1,101 @@
-# OPERATION: SURABAYA — Two Web Apps
+# OPERATION: SURABAYA
 
-Project contains two separate web frontends and one shared FastAPI backend:
-- `player-app/` — player registration, team selection, and waiting lobby.
-- `admin-dashboard/` — live match status, team roster, and start/end controls.
-- `backend/` — FastAPI connected to Supabase PostgreSQL.
+Tactical AI game system built with decoupled frontends and a modular FastAPI backend connected to Supabase PostgreSQL, following a standard **Laravel-style MVC Architecture**.
 
-## Important security notes
-- `.env` is intentionally excluded. Copy `backend/.env.example` to `backend/.env` and fill in the Supabase Project URL and server-side Secret/Service Role key.
-- Never place the Supabase Secret/Service Role key in frontend files or commit it to Git.
-- The uploaded archive contained a `.env` file with Supabase credentials. Rotate/revoke that key in Supabase before continuing, then use the new key only in your local backend `.env`.
-- Admin endpoints are currently prototype endpoints without admin authentication. Do not expose this backend publicly until authentication and authorization are implemented.
-- Player registration creates a profile only. Password authentication and Face Recognition are not implemented yet.
-- The Leave Lobby button currently resets the local portal view only; it does not remove the player from `match_players`.
+---
 
-## Requirements
-Python 3.11 recommended. Install dependencies inside the backend virtual environment:
+## Struktur Folder (Laravel-Style MVC)
 
-```powershell
-cd backend
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-copy .env.example .env
+```
+OperationSurabaya/
+│
+├── .gitignore                      # Mengabaikan .env, .venv, log, dan build artifacts
+├── .env                            # Kredensial lokal (Supabase URL, API Keys)
+├── .env.example                    # Template environment variables
+├── requirements.txt                # Dependensi Python
+├── main.py                         # Application Bootstrap & Entry Point
+├── README.md                       # Dokumentasi project
+│
+├── app/                            # Core Application Logic
+│   ├── Http/
+│   │   └── Controllers/            # [CONTROLLER] Business Logic, Validasi Game, DB Queries
+│   │       ├── health_controller.py
+│   │       ├── team_controller.py
+│   │       ├── player_controller.py
+│   │       ├── match_controller.py
+│   │       └── gameplay_controller.py
+│   │
+│   └── Models/                     # [MODEL] Data Representation & DTOs (Pydantic Models)
+│       ├── player.py               # PlayerRegister, PlayerLogin, PlayerLogout
+│       ├── match.py                # TeamSelection, LeaveTeam, HealthUpdate, Shoot, Heal
+│       └── __init__.py
+│
+├── routes/                         # [ROUTES] Route Definitions & Endpoints
+│   ├── api.py                      # Master Router (menggabungkan semua route module)
+│   ├── health_routes.py            # /, /health, /health/db
+│   ├── team_routes.py              # /api/teams
+│   ├── player_routes.py            # /api/players/*
+│   ├── match_routes.py             # /api/matches/*
+│   └── admin_routes.py             # /api/admin/*
+│
+├── resources/                      # [VIEW] Client-side Presentation Layer
+│   └── views/
+│       ├── player-app/             # Web Client untuk Player (Lobby, Team, Auth)
+│       │   ├── index.html
+│       │   ├── style.css
+│       │   └── app.js
+│       │
+│       └── admin-dashboard/        # Web Client untuk Admin (Match Control, Roster, Stats)
+│           ├── index.html
+│           ├── style.css
+│           └── app.js
+│
+└── config/                         # [CONFIG] Pengaturan & Service Connection
+    ├── config.py                   # App Configuration, CORS Origins, ENV Load
+    └── database.py                 # Supabase PostgreSQL Client & Supabase Auth Client
 ```
 
-Fill `backend/.env`, then run:
+---
 
+## Pemetaan Komponen (Laravel Concept)
+
+| Komponen Laravel | Lokasi di Project | Tanggung Jawab / Deskripsi |
+| :--- | :--- | :--- |
+| **Routes** | `routes/` (`api.py`, `*_routes.py`) | Menentukan URL path, HTTP method (`GET`, `POST`, `DELETE`), dan mengarahkan ke Controller terkait. |
+| **Controllers** | `app/Http/Controllers/` | Menangani alur bisnis, operasi database Supabase, validasi aturan main game (HP, damage, match rules). |
+| **Models** | `app/Models/` | Merepresentasikan struktur data, entitas, dan validasi payload request/response (Pydantic DTOs). |
+| **Views** | `resources/views/` | Lapisan antarmuka pengguna (`player-app` & `admin-dashboard`) berupa HTML, CSS, dan JS interaktif. |
+| **Config** | `config/` | Konfigurasi database (`database.py`) dan parameter runtime/CORS (`config.py`). |
+
+---
+
+## Cara Menjalankan
+
+### 1. Menjalankan Backend API
+Jalankan langsung dari root repository:
 ```powershell
+# Aktifkan virtual environment
+.\.venv\Scripts\Activate.ps1
+
+# Jalankan server FastAPI
 uvicorn main:app --reload
 ```
+* **Swagger Interactive Docs:** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+* **ReDoc:** [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
+* **Health Check:** [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
 
-API docs: http://127.0.0.1:8000/docs
+### 2. Menjalankan Views (Frontend)
 
-## Run Player Portal
-Open a second terminal:
-
+#### Player Portal:
 ```powershell
-cd player-app
+cd resources/views/player-app
+python -m http.server 5500
+```
+Buka di browser: [http://localhost:5500](http://localhost:5500)
+
+#### Admin Dashboard:
+```powershell
+cd resources/views/admin-dashboard
 python -m http.server 5501
 ```
-Open http://127.0.0.1:5501
-
-## Run Admin Dashboard
-Open a third terminal:
-
-```powershell
-cd admin-dashboard
-python -m http.server 5502
-```
-Open http://127.0.0.1:5502
-
-Both frontends call the local API at `http://127.0.0.1:8000`. The backend CORS configuration allows localhost ports 5501 and 5502.
-
-## Connected features
-- Player Portal: POST `/api/players/register`, GET `/api/matches/waiting`, POST `/api/matches/{match_id}/join`, GET `/api/matches/{match_id}/lobby`.
-- Admin Dashboard: GET `/api/matches/current`, GET `/api/matches/{match_id}/lobby`, POST `/api/admin/matches/{match_id}/start`, POST `/api/admin/matches/{match_id}/end`.
-- Admin Dashboard refreshes lobby and match state every four seconds (polling, not WebSocket realtime).
-
-## Current limitations
-- Registration is profile creation, not secure login/authentication.
-- Face Recognition, camera/WebRTC, YOLO, MediaPipe, player tracking, map, combat analytics, and AI services are not integrated.
-- Lobby synchronization uses periodic HTTP polling, not WebSocket/Supabase Realtime.
-- Admin endpoints need authentication/authorization and stronger transactional capacity checks before real deployment.
+Buka di browser: [http://localhost:5501](http://localhost:5501)
