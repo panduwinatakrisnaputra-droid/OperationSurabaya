@@ -63,3 +63,58 @@ Both frontends call the local API at `http://127.0.0.1:8000`. The backend CORS c
 - Face Recognition, camera/WebRTC, YOLO, MediaPipe, player tracking, map, combat analytics, and AI services are not integrated.
 - Lobby synchronization uses periodic HTTP polling, not WebSocket/Supabase Realtime.
 - Admin endpoints need authentication/authorization and stronger transactional capacity checks before real deployment.
+
+## QR Weapon Upgrade
+
+Fitur upgrade senjata menggunakan QR Code tanpa WUP/poin.
+
+1. Jalankan `backend/weapon_upgrade_qr_migration.sql` sekali di Supabase SQL Editor.
+2. Jalankan ulang backend FastAPI.
+3. Cetak tiga QR Code dengan isi teks persis berikut:
+   - `OPS-WEAPON-UPGRADE:WS-001`
+   - `OPS-WEAPON-UPGRADE:WS-002`
+   - `OPS-WEAPON-UPGRADE:WS-003`
+4. Tempel QR di tiga Weapon Upgrade Station yang berbeda.
+5. Saat pertandingan aktif, pemain menekan **SCAN QR UPGRADE** pada Player Portal dan mengarahkan kamera gameplay ke QR.
+
+Setiap station hanya dapat digunakan satu kali oleh pemain dalam satu pertandingan. Tiga station memungkinkan upgrade bertahap Level 1 → 2 → 3 → 4. Level maksimum tetap 4. QR hanya berlaku saat match aktif dan pemain belum tereliminasi. Riwayat upgrade masuk ke `game_events` dengan event type `weapon_upgrade`.
+
+QR dapat dibuat menggunakan aplikasi pembuat QR Code apa pun. Pastikan tipe kontennya Text dan jangan menambahkan spasi atau URL di depan/belakang payload.
+
+Catatan browser: pemindaian memakai `BarcodeDetector` bawaan browser. Gunakan Chrome/Edge versi terbaru dan izinkan akses kamera; browser harus berjalan pada localhost atau HTTPS.
+
+File QR siap cetak tersedia di folder `weapon-upgrade-qr/` (PNG per station dan `PRINT_WEAPON_UPGRADE_QR.pdf`). Cetak satu QR untuk setiap station.
+
+## Ghost Mode Treasure (baru)
+
+1. Jalankan `backend/ghost_mode_migration.sql` sekali di Supabase SQL Editor.
+2. QR Treasure Ghost Mode harus berisi teks persis `OPS-GHOST-MODE:GM-001`.
+3. Durasi awal efek adalah 30 detik; ubah `duration_seconds` pada tabel `ghost_mode_stations` jika diperlukan.
+4. Pemain membuka gameplay lalu menekan `CLAIM GHOST` dan scan QR (kamera atau unggah gambar).
+5. Efek berlaku untuk pemain yang memindai QR, bukan seluruh tim. Pemain tetap dapat menembak, tetapi endpoint damage akan menolak damage selama `ghost_mode_until` masih aktif.
+6. QR treasure yang sama hanya dapat diklaim satu kali oleh pemain pada satu pertandingan.
+
+Catatan: endpoint damage saat ini adalah `/api/matches/{match_id}/health/update`. Jika nanti AI Combat menerapkan damage melalui endpoint baru atau langsung ke database, validasi `ghost_mode_until` juga harus diterapkan di jalur tersebut.
+
+
+## Base Healing (QR + Pose Detection)
+1. Jalankan `backend/healing_system_migration.sql` satu kali di Supabase SQL Editor.
+2. QR base RED berisi `OPS-HEALING:BASE-RED`; QR base BLUE berisi `OPS-HEALING:BASE-BLUE`.
+3. Pemain membuka `BASE HEALING`, scan QR base tim sendiri, lalu menu healing terbuka.
+4. Pose detector yang sudah ditentukan perlu mengirim event browser `ops-healing-pose-valid` dengan `{ valid: true }` selama pose benar dan `{ valid: false }` saat pose terlepas.
+5. Pose harus terdeteksi terus-menerus selama 5 detik. Backend kemudian memulihkan 20 HP (maksimal sesuai max_health).
+
+### Integrasi modul pose yang sudah ada
+Setelah modul pose detector dimuat, set `window.OPERATION_SURABAYA_POSE_DETECTOR_READY = true`. Saat pose healing yang telah didefinisikan terdeteksi, panggil:
+`window.dispatchEvent(new CustomEvent('ops-healing-pose-valid', { detail: { valid: true } }));`
+Saat pose tidak lagi terdeteksi, kirim `valid: false`. Event ini adalah jembatan integrasi; file project ini belum berisi model atau definisi pose spesifik, sehingga modul pose milik project harus dihubungkan ke event tersebut.
+
+## Base Shutdown (tambahan)
+1. Jalankan `backend/base_shutdown_migration.sql` sekali di Supabase SQL Editor.
+2. Restart FastAPI.
+3. QR untuk base RED dan BLUE tersedia di folder `base-shutdown-qr/`.
+4. Pasang `BASE-RED.png` di base RED dan `BASE-BLUE.png` di base BLUE.
+5. Payload masing-masing: `OPS-BASE-SHUTDOWN:BASE-RED` dan `OPS-BASE-SHUTDOWN:BASE-BLUE`.
+6. Pemain scan QR base lawan. Player Portal menjalankan countdown 10 detik; jika selesai, backend memvalidasi tim dan mengakhiri match dengan `winner_team_code`.
+
+Catatan: countdown saat ini berjalan di sisi Player Portal; endpoint backend tetap memvalidasi status match, keanggotaan, tim penyerang/lawan, status eliminasi, dan mencegah penyelesaian base lebih dari sekali per match. Untuk deployment produksi, countdown perlu dipindahkan sepenuhnya ke backend dan ditambah validasi gangguan/interupsi berbasis event.
