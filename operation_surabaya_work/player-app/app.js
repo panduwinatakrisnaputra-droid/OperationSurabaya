@@ -10,6 +10,7 @@ const $ = (id) => document.getElementById(id);
 
 let player = null;
 let match = null;
+let roomsCache = [];
 let pollHandle = null;
 let accessToken = sessionStorage.getItem('access_token');
 
@@ -18,6 +19,20 @@ let gameplayOpened = false;
 let healthPollHandle = null;
 let playerEliminated = false;
 let shootCooldown = false;
+let timerTickHandle = null;
+let timerSyncHandle = null;
+let matchEndsAt = null;
+let timerExpiredHandled = false;
+let weaponQrScanActive = false;
+let weaponQrScanFrame = null;
+let weaponQrScanner = null;
+let weaponQrBusy = false;
+let weaponQrRestartGameplayCamera = false;
+let ghostQrScanner = null;
+let ghostQrBusy = false;
+let ghostQrRestartGameplayCamera = false;
+let ghostModeUntil = null;
+let ghostModeTickHandle = null;
 
 // ==========================================
 // API CONFIGURATION
@@ -213,6 +228,7 @@ function openGameplay() {
 
     $('operationStatus').textContent = 'ACTIVE';
     $('gameplayStatus').textContent = 'ACTIVE';
+    startBaseShutdownNotificationPolling();
 
     $('gameplayMatchName').textContent =
         match?.match_name || 'OPERATION: SURABAYA';
@@ -230,6 +246,8 @@ function openGameplay() {
 
     startGameplayCamera();
     startGameplayHealthPolling();
+    startGameplayTimer();
+    refreshGameplayWeapon();
 }
 
 // ==========================================
@@ -284,52 +302,168 @@ $('toggleRegisterPassword').addEventListener('click', event => {
 // ==========================================
 
 async function continueToTeam(profile) {
-    if (!profile) {
-        throw new Error(
-            'Profil pemain tidak ditemukan dari respons backend.'
-        );
-    }
-
+    if (!profile) throw new Error('Profil pemain tidak ditemukan dari respons backend.');
     player = profile;
-
-    $('welcomeText').textContent =
-        `Logged in as ${player.full_name} (@${player.username})`;
-
     $('loginPanel').classList.add('hidden');
-    $('teamPanel').classList.remove('hidden');
+    $('teamPanel').classList.add('hidden');
+    $('lobbyPanel').classList.add('hidden');
+    $('roomPanel').classList.remove('hidden');
+    $('roomWelcome').textContent = `Logged in as ${player.full_name} (@${player.username})`;
+    $('roomPlayerName').textContent = player.username || player.full_name;
+    $('operationStatus').textContent = 'ROOM BROWSER';
+    await loadRooms();
+}
 
-    setHint(
-        'teamHint',
-        'Memeriksa pertandingan yang sedang menunggu...'
-    );
+// ==========================================
+// ROOM BROWSER / CREATE / JOIN
+// ==========================================
 
-    const waiting = await api('/api/matches/waiting');
+function showRoomHint(id, message, isError = false) {
+    setHint(id, message, isError);
+}
 
-    if (!waiting.data) {
-        setHint(
-            'teamHint',
-            'Belum ada pertandingan waiting. Hubungi admin untuk membuat pertandingan.',
-            true
-        );
+async function loadRooms(search = '') {
+    const container = $('roomList');
+    container.innerHTML = '<p class="hint">Memuat daftar room...</p>';
+    try {
+        const query = new URLSearchParams({ status: 'waiting', page: '1', page_size: '50' });
+        if (search) query.set('search', search);
+        const result = await api(`/api/rooms?${query.toString()}`);
+        roomsCache = result.data || [];
+        renderRooms(roomsCache);
+        $('roomListHint').textContent = `${result.total_rooms || roomsCache.length} room tersedia.`;
+    } catch (error) {
+        container.innerHTML = '<p class="hint">Daftar room gagal dimuat.</p>';
+        showRoomHint('roomListHint', error.message, true);
+    }
+}
 
-        document.querySelectorAll('[data-team]').forEach(button => {
-            button.disabled = true;
-        });
-
+function renderRooms(rooms) {
+    const container = $('roomList');
+    container.innerHTML = '';
+    if (!rooms.length) {
+        container.innerHTML = '<p class="hint">Belum ada room yang tersedia. Kamu bisa membuat room baru atau bergabung menggunakan kode.</p>';
         return;
     }
-
-    match = waiting.data;
-
-    document.querySelectorAll('[data-team]').forEach(button => {
-        button.disabled = false;
+    rooms.forEach(room => {
+        const card = document.createElement('article');
+        card.className = 'room-card';
+        const title = document.createElement('div');
+        title.className = 'room-card-title';
+        const name = document.createElement('h4');
+        name.textContent = room.match_name || 'Untitled Room';
+        const code = document.createElement('span');
+        code.className = 'room-code';
+        code.textContent = room.room_code || 'NO CODE';
+        title.append(name, code);
+        const meta = document.createElement('p');
+        meta.textContent = `${room.arena_name || 'Arena'} · ${room.duration_hours ?? '-'} jam · ${String(room.status || '').toUpperCase()}`;
+        const teams = document.createElement('div');
+        teams.className = 'room-team-capacity';
+        const red = document.createElement('span');
+        red.className = 'red-text';
+        red.textContent = `RED ${room.red_team?.total ?? 0}/${room.red_team?.capacity ?? 0}`;
+        const blue = document.createElement('span');
+        blue.className = 'blue-text';
+        blue.textContent = `BLUE ${room.blue_team?.total ?? 0}/${room.blue_team?.capacity ?? 0}`;
+        teams.append(red, blue);
+        const controls = document.createElement('div');
+        controls.className = 'room-card-controls';
+        const select = document.createElement('select');
+        select.innerHTML = '<option value="RED">JOIN RED</option><option value="BLUE">JOIN BLUE</option>';
+        const join = document.createElement('button');
+        join.type = 'button'; join.className = 'btn primary'; join.textContent = 'JOIN';
+        join.addEventListener('click', () => joinRoom(room.room_code, select.value));
+        controls.append(select, join);
+        card.append(title, meta, teams, controls);
+        container.appendChild(card);
     });
-
-    setHint(
-        'teamHint',
-        `${match.match_name} · ${match.arena_name} · Pilih tim untuk bergabung.`
-    );
 }
+
+function enterLobby(room, teamCode) {
+    match = {
+        ...room,
+        red_capacity: room.red_capacity ?? room.red_team?.capacity,
+        blue_capacity: room.blue_capacity ?? room.blue_team?.capacity
+    };
+    window.currentPlayerTeam = teamCode;
+    $('lobbyRoomCode').textContent = room.room_code || 'ROOM CODE UNAVAILABLE';
+    $('assignment').textContent = `${teamCode} TEAM`;
+    $('assignment').className = `assignment ${teamCode.toLowerCase()}`;
+    $('lobbyWelcome').textContent = `${player.full_name} (@${player.username})`;
+    $('roomPanel').classList.add('hidden');
+    $('teamPanel').classList.add('hidden');
+    $('lobbyPanel').classList.remove('hidden');
+    $('operationStatus').textContent = 'LOBBY';
+    refreshLobby();
+    if (pollHandle) clearInterval(pollHandle);
+    pollHandle = setInterval(refreshLobby, 3000);
+}
+
+async function joinRoom(roomCode, teamCode) {
+    if (!player) return;
+    const button = $('joinRoomBtn');
+    if (button) button.disabled = true;
+    showRoomHint('joinRoomHint', 'Menghubungkan ke room...');
+    try {
+        const result = await api('/api/rooms/join', {
+            method: 'POST',
+            body: JSON.stringify({ room_code: roomCode.trim().toUpperCase(), player_id: player.id, team_code: teamCode })
+        });
+        const refreshed = await api(`/api/rooms?status=waiting&search=${encodeURIComponent(roomCode.trim().toUpperCase())}&page=1&page_size=10`);
+        const room = (refreshed.data || []).find(item => item.room_code === roomCode.trim().toUpperCase());
+        if (!room) throw new Error('Berhasil join, tetapi data room tidak ditemukan. Refresh Room Browser.');
+        showRoomHint('joinRoomHint', result.message || 'Berhasil bergabung.');
+        enterLobby(room, teamCode);
+    } catch (error) {
+        showRoomHint('joinRoomHint', error.message, true);
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
+
+$('createRoomBtn').addEventListener('click', async () => {
+    if (!player) return;
+    const payload = {
+        match_name: $('createRoomName').value.trim(),
+        host_player_id: player.id,
+        team_code: $('hostTeam').value,
+        red_capacity: Number($('redCapacity').value),
+        blue_capacity: Number($('blueCapacity').value),
+        duration_hours: Number($('roomDuration').value),
+        arena_name: $('roomArena').value.trim()
+    };
+    if (!payload.match_name || !payload.arena_name) {
+        showRoomHint('createRoomHint', 'Nama room dan arena wajib diisi.', true); return;
+    }
+    if (!Number.isInteger(payload.red_capacity) || !Number.isInteger(payload.blue_capacity) || payload.red_capacity < 1 || payload.blue_capacity < 1 || payload.red_capacity > 50 || payload.blue_capacity > 50 || !Number.isFinite(payload.duration_hours) || payload.duration_hours <= 0 || payload.duration_hours > 24) {
+        showRoomHint('createRoomHint', 'Periksa kapasitas tim (1–50) dan durasi (maksimal 24 jam).', true); return;
+    }
+    const button = $('createRoomBtn'); button.disabled = true;
+    showRoomHint('createRoomHint', 'Membuat room...');
+    try {
+        const result = await api('/api/rooms/create', { method: 'POST', body: JSON.stringify(payload) });
+        showRoomHint('createRoomHint', `Room dibuat. Kode: ${result.room.room_code}`);
+        enterLobby(result.room, payload.team_code);
+    } catch (error) {
+        showRoomHint('createRoomHint', error.message, true);
+    } finally { button.disabled = false; }
+});
+
+$('joinRoomBtn').addEventListener('click', () => {
+    const code = $('joinRoomCode').value.trim().toUpperCase();
+    if (!/^[A-Z0-9]{8}$/.test(code)) {
+        showRoomHint('joinRoomHint', 'Kode room harus terdiri dari 8 karakter.', true); return;
+    }
+    joinRoom(code, $('joinTeam').value);
+});
+$('refreshRoomsBtn').addEventListener('click', () => loadRooms());
+$('roomLogoutBtn').addEventListener('click', async () => {
+    try {
+        if (accessToken) await api('/api/players/logout', { method: 'POST', body: JSON.stringify({ access_token: accessToken }) });
+    } catch (error) { console.warn('Logout API:', error); }
+    resetPortal('Logout berhasil. Silakan login kembali.');
+});
 
 // ==========================================
 // LOGIN
@@ -454,60 +588,6 @@ $('registerBtn').addEventListener('click', async () => {
 });
 
 // ==========================================
-// TEAM SELECTION
-// ==========================================
-
-document.querySelectorAll('[data-team]').forEach(button => {
-    button.addEventListener('click', async () => {
-        if (!player || !match) return;
-
-        const teamCode = button.dataset.team;
-
-        button.disabled = true;
-
-        setHint(
-            'teamHint',
-            `Menggabungkan pemain ke ${teamCode} TEAM...`
-        );
-
-        try {
-            await api(`/api/matches/${match.id}/join`, {
-                method: 'POST',
-                body: JSON.stringify({
-                    player_id: player.id,
-                    team_code: teamCode
-                })
-            });
-
-            $('assignment').textContent = `${teamCode} TEAM`;
-
-            $('assignment').className =
-                `assignment ${teamCode.toLowerCase()}`;
-
-            $('lobbyWelcome').textContent =
-                `${player.full_name} (@${player.username})`;
-
-            $('lobbyPanel').classList.remove('hidden');
-            $('teamPanel').classList.add('hidden');
-
-            $('operationStatus').textContent = 'LOBBY';
-
-            await refreshLobby();
-
-            if (pollHandle) {
-                clearInterval(pollHandle);
-            }
-
-            pollHandle = setInterval(refreshLobby, 3000);
-
-        } catch (error) {
-            setHint('teamHint', error.message, true);
-            button.disabled = false;
-        }
-    });
-});
-
-// ==========================================
 // RENDER TEAM PLAYERS
 // ==========================================
 
@@ -587,6 +667,11 @@ async function refreshLobby() {
         );
 
         const lobby = result.lobby;
+        match = { ...match, ...result.match };
+
+        // Keep room and team identifiers visible in the waiting room.
+        $('lobbyRoomCode').textContent =
+            result.match.room_code || match.room_code || 'ROOM CODE UNAVAILABLE';
 
         console.log('DATA RED TEAM:', lobby.red_team);
         console.log('DATA BLUE TEAM:', lobby.blue_team);
@@ -602,10 +687,10 @@ async function refreshLobby() {
         );
 
         $('redTeamCount').textContent =
-            `${lobby.red_team.total} PLAYERS`;
+            `${lobby.red_team.total} / ${match.red_capacity ?? lobby.red_team.total} PLAYERS`;
 
         $('blueTeamCount').textContent =
-            `${lobby.blue_team.total} PLAYERS`;
+            `${lobby.blue_team.total} / ${match.blue_capacity ?? lobby.blue_team.total} PLAYERS`;
 
         const playerInRed = lobby.red_team.players.some(
             item => item.player.id === player.id
@@ -669,6 +754,88 @@ async function refreshLobby() {
 }
 
 // ==========================================
+// GAMEPLAY MATCH TIMER
+// ==========================================
+
+function formatMatchTime(totalSeconds) {
+    const safe = Math.max(0, Math.floor(totalSeconds));
+    const hours = Math.floor(safe / 3600);
+    const minutes = Math.floor((safe % 3600) / 60);
+    const seconds = safe % 60;
+    return [hours, minutes, seconds]
+        .map(value => String(value).padStart(2, '0'))
+        .join(':');
+}
+
+function renderMatchTimer() {
+    const timer = $('gameplayTimer');
+    const status = $('gameplayTimerStatus');
+    const card = timer?.closest('.match-timer-card');
+    if (!timer || !matchEndsAt) return;
+
+    const remaining = Math.max(0, Math.ceil((matchEndsAt - Date.now()) / 1000));
+    timer.textContent = formatMatchTime(remaining);
+    card?.classList.toggle('warning', remaining > 0 && remaining <= 300);
+
+    if (remaining <= 0) {
+        timer.textContent = '00:00:00';
+        card?.classList.add('expired');
+        if (status) status.textContent = 'TIME EXPIRED';
+        $('gameplayStatus').textContent = 'COMPLETED';
+        $('operationStatus').textContent = 'COMPLETED';
+        if (!timerExpiredHandled) {
+            timerExpiredHandled = true;
+            stopGameplayTimer();
+            stopGameplayCamera();
+            stopGameplayHealthPolling();
+            if (status) status.textContent = 'MATCH COMPLETED';
+            alert('Waktu pertandingan telah habis. Pertandingan selesai.');
+        }
+    } else if (status) {
+        status.textContent = remaining <= 300 ? 'FINAL COUNTDOWN' : 'MATCH IN PROGRESS';
+    }
+}
+
+async function syncGameplayTimer() {
+    if (!match || !gameplayOpened) return;
+    try {
+        const result = await api(`/api/matches/${match.id}/timer`);
+        if (result.ends_at) matchEndsAt = new Date(result.ends_at).getTime();
+        if (result.status === 'completed') {
+            matchEndsAt = Math.min(matchEndsAt || Date.now(), Date.now());
+        }
+        renderMatchTimer();
+    } catch (error) {
+        console.error('Gagal sinkronisasi match timer:', error);
+        if ($('gameplayTimerStatus')) $('gameplayTimerStatus').textContent = 'SYNC RETRY';
+    }
+}
+
+function startGameplayTimer() {
+    stopGameplayTimer();
+    timerExpiredHandled = false;
+    const startedAt = match?.started_at ? new Date(match.started_at).getTime() : NaN;
+    const durationHours = Number(match?.duration_hours);
+    if (Number.isFinite(startedAt) && Number.isFinite(durationHours) && durationHours > 0) {
+        matchEndsAt = startedAt + durationHours * 3600000;
+    } else {
+        matchEndsAt = null;
+        $('gameplayTimer').textContent = '--:--:--';
+        $('gameplayTimerStatus').textContent = 'TIME NOT SET';
+    }
+    syncGameplayTimer();
+    timerTickHandle = setInterval(renderMatchTimer, 1000);
+    timerSyncHandle = setInterval(syncGameplayTimer, 10000);
+}
+
+function stopGameplayTimer() {
+    if (timerTickHandle) clearInterval(timerTickHandle);
+    if (timerSyncHandle) clearInterval(timerSyncHandle);
+    timerTickHandle = null;
+    timerSyncHandle = null;
+}
+
+// ==========================================
 // GAMEPLAY HEALTH SYSTEM
 // ==========================================
 
@@ -697,6 +864,36 @@ function showEliminatedScreen() {
     }
 }
 
+function renderGhostMode(until) {
+    const indicator = $('ghostModeIndicator');
+    const countdown = $('ghostModeCountdown');
+    if (!indicator || !countdown) return;
+    ghostModeUntil = until || null;
+    if (ghostModeTickHandle) clearInterval(ghostModeTickHandle);
+
+    const tick = () => {
+        if (!ghostModeUntil) {
+            indicator.classList.add('hidden');
+            document.body.classList.remove('ghost-mode-active');
+            return;
+        }
+        const remaining = Math.max(0, Math.ceil((new Date(ghostModeUntil).getTime() - Date.now()) / 1000));
+        if (remaining <= 0) {
+            ghostModeUntil = null;
+            indicator.classList.add('hidden');
+            document.body.classList.remove('ghost-mode-active');
+            if (ghostModeTickHandle) clearInterval(ghostModeTickHandle);
+            ghostModeTickHandle = null;
+            return;
+        }
+        indicator.classList.remove('hidden');
+        document.body.classList.add('ghost-mode-active');
+        countdown.textContent = `${String(Math.floor(remaining / 60)).padStart(2, '0')}:${String(remaining % 60).padStart(2, '0')}`;
+    };
+    tick();
+    ghostModeTickHandle = setInterval(tick, 1000);
+}
+
 async function refreshGameplayHealth() {
     if (!player || !match || !gameplayOpened) return;
 
@@ -713,6 +910,8 @@ async function refreshGameplayHealth() {
             console.warn('Data health pemain tidak ditemukan.');
             return;
         }
+
+        renderGhostMode(health.ghost_mode_until);
 
         const hp = Number(health.current_health);
         const maxHp = Number(health.max_health);
@@ -778,6 +977,338 @@ function stopGameplayHealthPolling() {
 }
 
 // ==========================================
+// GAMEPLAY WEAPON HUD
+// ==========================================
+
+async function refreshGameplayWeapon() {
+    if (!player || !match || !gameplayOpened) return;
+    try {
+        const result = await api(
+            `/api/matches/${match.id}/weapon/${player.id}`
+        );
+        if ($('weaponName')) $('weaponName').textContent = result.weapon_name || 'TACTICAL RIFLE';
+        if ($('weaponLevel')) $('weaponLevel').textContent = `WEAPON LEVEL ${result.weapon_level}`;
+        if ($('weaponDamage')) $('weaponDamage').textContent = result.damage;
+    } catch (error) {
+        console.error('Gagal mengambil data senjata:', error);
+        if ($('weaponLevel')) $('weaponLevel').textContent = 'WEAPON DATA UNAVAILABLE';
+    }
+}
+
+function setWeaponScanStatus(message, isError = false) {
+    const status = $('weaponScanStatus');
+    if (!status) return;
+    status.textContent = message;
+    status.classList.add('visible');
+    status.style.color = isError ? '#ff858a' : '#c7f36b';
+}
+
+function setWeaponQrModalStatus(message, isError = false) {
+    const status = $('weaponQrModalStatus');
+    if (!status) return;
+    status.textContent = message;
+    status.style.color = isError ? '#ff858a' : '#c7f36b';
+}
+
+async function stopWeaponQrScanner(restartGameplay = true) {
+    const scanner = weaponQrScanner;
+    weaponQrScanner = null;
+    if (scanner) {
+        try {
+            const state = scanner.getState ? scanner.getState() : null;
+            if (state === 2 || state === 1) await scanner.stop();
+        } catch (error) {
+            console.warn('QR scanner stop:', error);
+        }
+        try { scanner.clear(); } catch (_) {}
+    }
+    const modal = $('weaponQrModal');
+    if (modal) modal.classList.add('hidden');
+    const button = $('scanWeaponQrBtn');
+    if (button) { button.disabled = false; button.innerHTML = 'SCAN QR<br>UPGRADE'; }
+    if (restartGameplay && weaponQrRestartGameplayCamera && gameplayOpened && !playerEliminated) {
+        weaponQrRestartGameplayCamera = false;
+        try { await startGameplayCamera(); } catch (error) { console.warn('Gameplay camera restart:', error); }
+    } else {
+        weaponQrRestartGameplayCamera = false;
+    }
+}
+
+async function processWeaponQrPayload(qrPayload) {
+    if (!player || !match || weaponQrBusy) return;
+    weaponQrBusy = true;
+    setWeaponScanStatus('Memvalidasi QR Weapon Upgrade...');
+    setWeaponQrModalStatus('QR terbaca. Memvalidasi upgrade...');
+    try {
+        const result = await api(`/api/matches/${match.id}/weapon/upgrade/scan`, {
+            method: 'POST',
+            body: JSON.stringify({ player_id: player.id, qr_payload: qrPayload })
+        });
+        setWeaponScanStatus(result.message || 'Upgrade berhasil.');
+        setWeaponQrModalStatus(result.message || 'Upgrade berhasil.');
+        await refreshGameplayWeapon();
+    } catch (error) {
+        setWeaponScanStatus(error.message || 'QR tidak dapat diproses.', true);
+        setWeaponQrModalStatus(error.message || 'QR tidak dapat diproses.', true);
+    } finally {
+        await stopWeaponQrScanner(true);
+        weaponQrBusy = false;
+    }
+}
+
+async function startWeaponQrScanner() {
+    if (!gameplayOpened || !player || !match || playerEliminated) return;
+    if (weaponQrScanner) { await stopWeaponQrScanner(true); return; }
+    if (typeof Html5Qrcode === 'undefined') {
+        setWeaponScanStatus('Library QR scanner gagal dimuat. Periksa koneksi internet.', true);
+        return;
+    }
+
+    const modal = $('weaponQrModal');
+    const button = $('scanWeaponQrBtn');
+    if (modal) modal.classList.remove('hidden');
+    if (button) { button.disabled = true; button.textContent = 'OPENING...'; }
+    setWeaponQrModalStatus('Meminta izin kamera...');
+
+    try {
+        // Release gameplay camera first; some mobile devices allow only one active camera stream.
+        weaponQrRestartGameplayCamera = !!cameraStream;
+        if (cameraStream) stopGameplayCamera();
+
+        weaponQrScanner = new Html5Qrcode('weaponQrReader', {
+            verbose: false,
+            formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
+        });
+        const config = {
+            fps: 10,
+            qrbox: (viewWidth, viewHeight) => {
+                const size = Math.max(160, Math.min(260, Math.floor(Math.min(viewWidth, viewHeight) * 0.72)));
+                return { width: size, height: size };
+            },
+            aspectRatio: 1.0
+        };
+        await weaponQrScanner.start(
+            { facingMode: 'environment' },
+            config,
+            async (decodedText) => {
+                if (weaponQrBusy) return;
+                await processWeaponQrPayload(decodedText);
+            },
+            () => {}
+        );
+        if (button) { button.disabled = false; button.innerHTML = 'CANCEL<br>SCAN'; }
+        setWeaponQrModalStatus('Kamera aktif. Arahkan ke QR Code stasiun upgrade.');
+    } catch (error) {
+        console.warn('Camera QR scanner error:', error);
+        setWeaponQrModalStatus('Kamera tidak dapat dibuka. Coba pilih gambar QR dari galeri.', true);
+        if (button) { button.disabled = false; button.innerHTML = 'SCAN QR<br>UPGRADE'; }
+        // Keep modal open so file-based QR scanning remains available.
+    }
+}
+
+async function scanWeaponQrImage(file) {
+    if (!file || !player || !match || typeof Html5Qrcode === 'undefined') return;
+    setWeaponQrModalStatus('Membaca gambar QR...');
+    const imageScanner = new Html5Qrcode('weaponQrReader', { verbose: false });
+    try {
+        const decodedText = await imageScanner.scanFile(file, true);
+        await processWeaponQrPayload(decodedText);
+    } catch (error) {
+        setWeaponQrModalStatus('QR tidak ditemukan pada gambar. Coba foto yang lebih jelas.', true);
+    } finally {
+        try { imageScanner.clear(); } catch (_) {}
+        $('weaponQrFile').value = '';
+    }
+}
+
+// ==========================================
+// GHOST MODE TREASURE QR SCANNER
+// ==========================================
+
+async function stopGhostQrScanner(restartGameplay = true) {
+    const scanner = ghostQrScanner;
+    ghostQrScanner = null;
+    if (scanner) {
+        try { const state = scanner.getState ? scanner.getState() : null; if (state === 2 || state === 1) await scanner.stop(); } catch (error) { console.warn('Ghost QR scanner stop:', error); }
+        try { scanner.clear(); } catch (_) {}
+    }
+    $('ghostQrModal')?.classList.add('hidden');
+    const button = $('scanGhostQrBtn');
+    if (button) { button.disabled = false; button.innerHTML = 'CLAIM<br>GHOST'; }
+    if (restartGameplay && ghostQrRestartGameplayCamera && gameplayOpened && !playerEliminated) {
+        ghostQrRestartGameplayCamera = false;
+        try { await startGameplayCamera(); } catch (error) { console.warn('Gameplay camera restart:', error); }
+    } else { ghostQrRestartGameplayCamera = false; }
+}
+
+async function processGhostQrPayload(qrPayload) {
+    if (!player || !match || ghostQrBusy) return;
+    ghostQrBusy = true;
+    $('ghostQrModalStatus').textContent = 'QR terbaca. Memvalidasi treasure...';
+    try {
+        const result = await api(`/api/matches/${match.id}/ghost-mode/scan`, {
+            method: 'POST', body: JSON.stringify({ player_id: player.id, qr_payload: qrPayload })
+        });
+        $('ghostQrModalStatus').textContent = result.message || 'Ghost Mode berhasil diaktifkan.';
+        renderGhostMode(result.ghost_mode_until);
+        setTimeout(() => stopGhostQrScanner(true), 1200);
+    } catch (error) {
+        $('ghostQrModalStatus').textContent = error.message || 'QR tidak dapat diproses.';
+        $('ghostQrModalStatus').style.color = '#ff858a';
+        await stopGhostQrScanner(true);
+    } finally { ghostQrBusy = false; }
+}
+
+async function startGhostQrScanner() {
+    if (!gameplayOpened || !player || !match || playerEliminated) return;
+    if (ghostQrScanner) { await stopGhostQrScanner(true); return; }
+    if (typeof Html5Qrcode === 'undefined') { alert('Library QR scanner belum dimuat. Periksa koneksi internet.'); return; }
+    $('ghostQrModal').classList.remove('hidden');
+    $('ghostQrModalStatus').textContent = 'Meminta izin kamera...';
+    const button = $('scanGhostQrBtn');
+    if (button) { button.disabled = true; button.textContent = 'OPENING...'; }
+    try {
+        ghostQrRestartGameplayCamera = !!cameraStream;
+        if (cameraStream) stopGameplayCamera();
+        ghostQrScanner = new Html5Qrcode('ghostQrReader', { verbose: false, formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE] });
+        await ghostQrScanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: (w, h) => { const size = Math.max(160, Math.min(260, Math.floor(Math.min(w, h) * .72))); return { width: size, height: size }; }, aspectRatio: 1 }, async decoded => { if (!ghostQrBusy) await processGhostQrPayload(decoded); }, () => {});
+        if (button) { button.disabled = false; button.innerHTML = 'CANCEL<br>SCAN'; }
+        $('ghostQrModalStatus').textContent = 'Kamera aktif. Arahkan ke QR Treasure Ghost Mode.';
+    } catch (error) {
+        console.warn('Ghost QR camera error:', error);
+        $('ghostQrModalStatus').textContent = 'Kamera tidak dapat dibuka. Pilih gambar QR dari galeri.';
+        $('ghostQrModalStatus').style.color = '#ff858a';
+        if (button) { button.disabled = false; button.innerHTML = 'CLAIM<br>GHOST'; }
+    }
+}
+
+async function scanGhostQrImage(file) {
+    if (!file || !player || !match || typeof Html5Qrcode === 'undefined') return;
+    $('ghostQrModalStatus').textContent = 'Membaca gambar QR...';
+    const scanner = new Html5Qrcode('ghostQrReader', { verbose: false });
+    try { const decoded = await scanner.scanFile(file, true); await processGhostQrPayload(decoded); }
+    catch (error) { $('ghostQrModalStatus').textContent = 'QR tidak ditemukan pada gambar. Coba gambar yang lebih jelas.'; $('ghostQrModalStatus').style.color = '#ff858a'; }
+    finally { try { scanner.clear(); } catch (_) {} $('ghostQrFile').value = ''; }
+}
+
+
+// ==========================================
+// BASE HEALING: QR + EXISTING POSE DETECTOR BRIDGE
+// Pose detector integration contract: dispatch `ops-healing-pose-valid` with
+// detail.valid=true while the configured healing pose is continuously held.
+// Dispatch detail.valid=false (or stop dispatching) when pose is lost.
+// ==========================================
+let healingQrScanner = null;
+let healingQrBusy = false;
+let healingQrRestartGameplayCamera = false;
+let healingStationPayload = null;
+let healingPoseTimer = null;
+let healingPoseStartedAt = null;
+let healingPoseValid = false;
+let healingCompleteBusy = false;
+const HEALING_POSE_HOLD_SECONDS = 5;
+
+function setHealingStatus(message, isError = false) {
+    const el = $('healingQrStatus');
+    if (el) { el.textContent = message; el.style.color = isError ? '#ff858a' : '#9bf0c9'; }
+}
+function setHealingPoseStatus(message, isError = false) {
+    const el = $('healingPoseStatus');
+    if (el) { el.textContent = message; el.style.color = isError ? '#ff858a' : '#9bf0c9'; }
+}
+function resetHealingPoseProgress() {
+    healingPoseStartedAt = null;
+    const fill = $('healingProgressFill'); if (fill) fill.style.width = '0%';
+    const countdown = $('healingCountdown'); if (countdown) countdown.textContent = 'POSE BELUM TERDETEKSI';
+}
+async function stopHealingQrScanner(restartGameplay = true) {
+    if (healingPoseTimer) clearInterval(healingPoseTimer);
+    healingPoseTimer = null; healingPoseValid = false; healingStationPayload = null;
+    const scanner = healingQrScanner; healingQrScanner = null;
+    if (scanner) { try { const state = scanner.getState?.(); if (state === 2 || state === 1) await scanner.stop(); } catch (_) {} try { scanner.clear(); } catch (_) {} }
+    $('healingQrModal')?.classList.add('hidden');
+    $('healingMenu')?.classList.add('hidden');
+    resetHealingPoseProgress();
+    if (restartGameplay && healingQrRestartGameplayCamera && gameplayOpened && !playerEliminated) {
+        healingQrRestartGameplayCamera = false; try { await startGameplayCamera(); } catch (e) { console.warn(e); }
+    } else healingQrRestartGameplayCamera = false;
+}
+async function processHealingQrPayload(payload) {
+    if (healingQrBusy || !player || !match) return;
+    healingQrBusy = true;
+    try {
+        if (!String(payload).startsWith('OPS-HEALING:')) throw new Error('QR bukan QR Healing Base.');
+        healingStationPayload = String(payload).trim();
+        $('healingMenu')?.classList.remove('hidden');
+        $('healingQrReader')?.classList.add('hidden');
+        $('healingQrFile')?.classList.add('hidden');
+        setHealingStatus('QR terbaca. Lakukan pose healing untuk memulai pemulihan.');
+        setHealingPoseStatus('Menunggu sinyal dari pose detector...');
+        if (window.OPERATION_SURABAYA_POSE_DETECTOR_READY !== true) {
+            setHealingPoseStatus('Pose detector belum terhubung. Hubungkan modul pose yang sudah kamu definisikan.', true);
+        }
+    } catch (e) { setHealingStatus(e.message || 'QR tidak valid.', true); }
+    finally { healingQrBusy = false; }
+}
+async function startHealingQrScanner() {
+    if (!gameplayOpened || !player || !match || playerEliminated) return;
+    if (typeof Html5Qrcode === 'undefined') { setHealingStatus('Library QR scanner gagal dimuat.', true); return; }
+    $('healingQrModal')?.classList.remove('hidden');
+    $('healingMenu')?.classList.add('hidden');
+    $('healingQrReader')?.classList.remove('hidden');
+    $('healingQrFile')?.classList.remove('hidden');
+    setHealingStatus('Meminta izin kamera...');
+    try {
+        healingQrRestartGameplayCamera = !!cameraStream; if (cameraStream) stopGameplayCamera();
+        healingQrScanner = new Html5Qrcode('healingQrReader', { verbose:false, formatsToSupport:[Html5QrcodeSupportedFormats.QR_CODE] });
+        await healingQrScanner.start({facingMode:'environment'}, {fps:10, qrbox:(w,h)=>{const z=Math.max(160,Math.min(260,Math.floor(Math.min(w,h)*.72)));return {width:z,height:z};}, aspectRatio:1}, async decoded=>{ if (!healingQrBusy) { const activeScanner=healingQrScanner; healingQrScanner=null; try { await activeScanner.stop(); } catch (_) {} try { activeScanner.clear(); } catch (_) {} $('healingQrModal')?.classList.remove('hidden'); healingStationPayload=decoded; await processHealingQrPayload(decoded); } }, ()=>{});
+        setHealingStatus('Kamera aktif. Scan QR yang terpasang di base tim kamu.');
+    } catch (e) { setHealingStatus('Kamera tidak tersedia. Pilih gambar QR dari galeri.', true); }
+}
+async function scanHealingQrImage(file) {
+    if (!file || typeof Html5Qrcode === 'undefined') return;
+    const scanner = new Html5Qrcode('healingQrReader', {verbose:false});
+    try { const decoded = await scanner.scanFile(file, true); await processHealingQrPayload(decoded); }
+    catch (_) { setHealingStatus('QR tidak ditemukan pada gambar.', true); }
+    finally { try { scanner.clear(); } catch (_) {} $('healingQrFile').value=''; }
+}
+async function completeHealingFromPose() {
+    if (healingCompleteBusy || !healingStationPayload || !player || !match) return;
+    healingCompleteBusy = true;
+    setHealingPoseStatus('Pose valid. Memproses healing...');
+    try {
+        const result = await api(`/api/matches/${match.id}/heal`, {method:'POST', body:JSON.stringify({player_id:player.id, qr_payload:healingStationPayload, pose_verified:true})});
+        setHealingPoseStatus(result.message || 'Healing berhasil.');
+        setHealingStatus(`HP sekarang ${result.current_health}/${result.max_health}.`);
+        await refreshGameplayHealth();
+        setTimeout(()=>stopHealingQrScanner(true), 1500);
+    } catch (e) { setHealingPoseStatus(e.message || 'Healing gagal.', true); }
+    finally { healingCompleteBusy = false; resetHealingPoseProgress(); }
+}
+function handleHealingPoseSignal(event) {
+    const valid = !!event?.detail?.valid;
+    if (!healingStationPayload || $('healingMenu')?.classList.contains('hidden')) return;
+    healingPoseValid = valid;
+    if (!valid) {
+        if (healingPoseTimer) clearInterval(healingPoseTimer); healingPoseTimer = null; resetHealingPoseProgress();
+        setHealingPoseStatus('Pose tidak terdeteksi. Pertahankan pose healing yang benar.'); return;
+    }
+    if (healingPoseTimer) return;
+    healingPoseStartedAt = Date.now();
+    setHealingPoseStatus('Pose terdeteksi. Pertahankan selama 5 detik.');
+    healingPoseTimer = setInterval(()=>{
+        if (!healingPoseValid) return;
+        const elapsed = (Date.now()-healingPoseStartedAt)/1000;
+        const pct = Math.min(100, elapsed/HEALING_POSE_HOLD_SECONDS*100);
+        if ($('healingProgressFill')) $('healingProgressFill').style.width = `${pct}%`;
+        const left = Math.max(0, Math.ceil(HEALING_POSE_HOLD_SECONDS-elapsed));
+        if ($('healingCountdown')) $('healingCountdown').textContent = `PERTAHANKAN POSE · ${left} DETIK`;
+        if (elapsed >= HEALING_POSE_HOLD_SECONDS) { clearInterval(healingPoseTimer); healingPoseTimer=null; completeHealingFromPose(); }
+    },100);
+}
+window.addEventListener('ops-healing-pose-valid', handleHealingPoseSignal);
+
+// ==========================================
 // GAMEPLAY SHOOT ACTION
 // ==========================================
 
@@ -819,7 +1350,7 @@ async function sendShootEvent() {
         console.log('Shoot berhasil:', result);
 
         if (shootLabel) {
-            shootLabel.textContent = 'SHOT SENT';
+            shootLabel.textContent = `SHOT · ${result.weapon_damage ?? 10} DMG`;
         }
 
     } catch (error) {
@@ -847,6 +1378,120 @@ async function sendShootEvent() {
 }
 
 // ==========================================
+// ==========================================
+// BASE SHUTDOWN QR
+// ==========================================
+let baseShutdownScanner = null;
+let baseShutdownBusy = false;
+let baseShutdownTimer = null;
+let baseShutdownRestartGameplayCamera = false;
+let baseShutdownInProgress = false;
+let baseShutdownEventPollHandle = null;
+let seenBaseShutdownEventIds = new Set();
+let baseShutdownEventsInitialized = false;
+let baseDefenseNotificationTimer = null;
+
+function showBaseDefenseNotification(attackerTeam) {
+  const panel = $('baseDefenseNotification');
+  if (!panel) return;
+  $('baseDefenseNotificationTitle').textContent = 'BASE UNDER ATTACK!';
+  $('baseDefenseNotificationMessage').textContent = `Tim ${attackerTeam} sedang mencoba menonaktifkan base ${window.currentPlayerTeam}. Segera pertahankan base kalian!`;
+  panel.classList.remove('hidden');
+  panel.classList.add('visible');
+  if (baseDefenseNotificationTimer) clearTimeout(baseDefenseNotificationTimer);
+  baseDefenseNotificationTimer = setTimeout(() => panel.classList.remove('visible'), 10000);
+}
+
+async function pollBaseShutdownNotifications() {
+  if (!player || !match || !gameplayOpened) return;
+  try {
+    const result = await api(`/api/matches/${match.id}/events`);
+    const events = result.events || [];
+    if (!baseShutdownEventsInitialized) {
+      events.forEach(event => { if (event.id) seenBaseShutdownEventIds.add(event.id); });
+      baseShutdownEventsInitialized = true;
+      return;
+    }
+    const ownTeam = String(window.currentPlayerTeam || '').toUpperCase();
+    events.slice().reverse().forEach(event => {
+      if (!event.id || seenBaseShutdownEventIds.has(event.id)) return;
+      seenBaseShutdownEventIds.add(event.id);
+      if (event.event_type !== 'base_shutdown_started') return;
+      const data = event.event_data || {};
+      if (String(data.defender_team_code || '').toUpperCase() === ownTeam) {
+        showBaseDefenseNotification(String(data.attacker_team_code || 'LAWAN').toUpperCase());
+      }
+    });
+    if (seenBaseShutdownEventIds.size > 300) seenBaseShutdownEventIds = new Set([...seenBaseShutdownEventIds].slice(-150));
+  } catch (error) {
+    console.warn('Gagal memeriksa notifikasi Base Shutdown:', error);
+  }
+}
+
+function startBaseShutdownNotificationPolling() {
+  stopBaseShutdownNotificationPolling();
+  seenBaseShutdownEventIds = new Set();
+  baseShutdownEventsInitialized = false;
+  pollBaseShutdownNotifications();
+  baseShutdownEventPollHandle = setInterval(pollBaseShutdownNotifications, 1500);
+}
+
+function stopBaseShutdownNotificationPolling() {
+  if (baseShutdownEventPollHandle) clearInterval(baseShutdownEventPollHandle);
+  baseShutdownEventPollHandle = null;
+  if (baseDefenseNotificationTimer) clearTimeout(baseDefenseNotificationTimer);
+  baseDefenseNotificationTimer = null;
+}
+
+function setBaseShutdownStatus(message, isError=false){const el=$('baseShutdownStatus');if(el){el.textContent=message;el.style.color=isError?'#ff858a':'';}}
+async function stopBaseShutdownScanner(restartGameplay=true){
+  if(baseShutdownTimer){clearInterval(baseShutdownTimer);baseShutdownTimer=null;}
+  const scanner=baseShutdownScanner;baseShutdownScanner=null;
+  if(scanner){try{const state=scanner.getState?.();if(state===2||state===1)await scanner.stop();}catch(e){console.warn('Base shutdown scanner stop:',e);}try{scanner.clear();}catch(_){}}
+  $('baseShutdownModal')?.classList.add('hidden');$('baseShutdownCountdown')?.classList.add('hidden');
+  const button=$('scanBaseShutdownBtn');if(button){button.disabled=false;button.innerHTML='<span>04</span> SHUTDOWN BASE';}
+  if(restartGameplay&&baseShutdownRestartGameplayCamera&&gameplayOpened&&!playerEliminated){baseShutdownRestartGameplayCamera=false;try{await startGameplayCamera();}catch(e){console.warn(e);}}else baseShutdownRestartGameplayCamera=false;
+}
+async function finishBaseShutdown(payload){
+  if(!player||!match||baseShutdownBusy)return;
+  baseShutdownBusy=true;
+  try {
+    // Validasi server dan kirim event agar seluruh pemain tim bertahan mendapat notifikasi.
+    await api(`/api/matches/${match.id}/base-shutdown/start`,{method:'POST',body:JSON.stringify({player_id:player.id,qr_payload:payload})});
+  } catch(error) {
+    baseShutdownBusy=false;
+    setBaseShutdownStatus(error.message || 'Tidak dapat memulai Base Shutdown.', true);
+    return;
+  }
+  baseShutdownInProgress=true;
+  const countdown=$('baseShutdownCountdown');let remaining=10;countdown?.classList.remove('hidden');if(countdown)countdown.textContent=String(remaining);
+  setBaseShutdownStatus('QR valid. Pertahankan posisi sampai proses shutdown selesai.');
+  const button=$('cancelBaseShutdownBtn');if(button)button.textContent='BATALKAN PROSES';
+  baseShutdownTimer=setInterval(async()=>{remaining--;if(countdown)countdown.textContent=String(remaining);if(remaining<=0){clearInterval(baseShutdownTimer);baseShutdownTimer=null;try{
+    const result=await api(`/api/matches/${match.id}/base-shutdown/complete`,{method:'POST',body:JSON.stringify({player_id:player.id,qr_payload:payload})});
+    setBaseShutdownStatus(result.message||'Base lawan berhasil dinonaktifkan.');if(countdown)countdown.textContent='SUCCESS';
+    const status=$('gameplayStatus');if(status)status.textContent=`${result.winner_team_code} WIN`;
+    const shoot=$('shootBtn');if(shoot)shoot.disabled=true;
+    setTimeout(()=>stopBaseShutdownScanner(false),2500);
+  }catch(error){setBaseShutdownStatus(error.message||'Shutdown gagal.',true);baseShutdownInProgress=false;setTimeout(()=>stopBaseShutdownScanner(true),1800);}finally{baseShutdownBusy=false;}}},1000);
+}
+async function processBaseShutdownPayload(payload){
+  if(!player||!match||baseShutdownBusy)return;const clean=String(payload||'').trim();
+  if(!clean.startsWith('OPS-BASE-SHUTDOWN:')){setBaseShutdownStatus('QR bukan QR Base Shutdown.',true);return;}
+  const code=clean.slice('OPS-BASE-SHUTDOWN:'.length).trim();if(!['BASE-RED','BASE-BLUE'].includes(code)){setBaseShutdownStatus('Kode base tidak valid.',true);return;}
+  // Backend performs the authoritative team/match validation after the countdown.
+  if(baseShutdownScanner){const sc=baseShutdownScanner;baseShutdownScanner=null;try{await sc.stop();}catch(_){}try{sc.clear();}catch(_){}}
+  await finishBaseShutdown(clean);
+}
+async function startBaseShutdownScanner(){
+  if(!gameplayOpened||!player||!match||playerEliminated||baseShutdownBusy)return;
+  if(typeof Html5Qrcode==='undefined'){setBaseShutdownStatus('Library QR scanner gagal dimuat.',true);return;}
+  $('baseShutdownModal')?.classList.remove('hidden');setBaseShutdownStatus('Meminta izin kamera...');
+  baseShutdownRestartGameplayCamera=!!cameraStream;if(cameraStream)stopGameplayCamera();
+  try{baseShutdownScanner=new Html5Qrcode('baseShutdownReader',{verbose:false,formatsToSupport:[Html5QrcodeSupportedFormats.QR_CODE]});await baseShutdownScanner.start({facingMode:'environment'},{fps:10,qrbox:(w,h)=>{const n=Math.max(160,Math.min(260,Math.floor(Math.min(w,h)*.72)));return{width:n,height:n};},aspectRatio:1},async text=>{if(!baseShutdownBusy)await processBaseShutdownPayload(text);},()=>{});setBaseShutdownStatus('Kamera aktif. Scan QR Base milik tim lawan.');}catch(e){setBaseShutdownStatus('Kamera tidak dapat dibuka. Gunakan gambar QR dari galeri.',true);}
+}
+async function scanBaseShutdownImage(file){if(!file||typeof Html5Qrcode==='undefined')return;const scanner=new Html5Qrcode('baseShutdownReader',{verbose:false});try{const decoded=await scanner.scanFile(file,true);await processBaseShutdownPayload(decoded);}catch(e){setBaseShutdownStatus('QR tidak terbaca. Coba gambar yang lebih jelas.',true);}finally{try{scanner.clear();}catch(_){}$('baseShutdownFile').value='';}}
+
 // GAMEPLAY CAMERA CONTROLS
 // ==========================================
 
@@ -860,11 +1505,32 @@ $('shootBtn').addEventListener(
     sendShootEvent
 );
 
+$('scanWeaponQrBtn').addEventListener('click', startWeaponQrScanner);
+$('scanBaseShutdownBtn').addEventListener('click', startBaseShutdownScanner);
+$('closeBaseDefenseNotification').addEventListener('click', () => $('baseDefenseNotification')?.classList.remove('visible'));
+$('closeBaseShutdownBtn').addEventListener('click', () => stopBaseShutdownScanner(true));
+$('cancelBaseShutdownBtn').addEventListener('click', () => { if(baseShutdownTimer){clearInterval(baseShutdownTimer);baseShutdownTimer=null;} baseShutdownBusy=false;baseShutdownInProgress=false;setBaseShutdownStatus('Proses shutdown dibatalkan.',true);stopBaseShutdownScanner(true); });
+$('baseShutdownFile').addEventListener('change', event => scanBaseShutdownImage(event.target.files?.[0]));
+$('closeWeaponQrBtn').addEventListener('click', () => stopWeaponQrScanner(true));
+$('cancelWeaponQrBtn').addEventListener('click', () => stopWeaponQrScanner(true));
+$('weaponQrFile').addEventListener('change', (event) => scanWeaponQrImage(event.target.files?.[0]));
+$('scanGhostQrBtn').addEventListener('click', startGhostQrScanner);
+$('openHealingBtn').addEventListener('click', startHealingQrScanner);
+$('closeHealingQrBtn').addEventListener('click', () => stopHealingQrScanner(true));
+$('cancelHealingQrBtn').addEventListener('click', () => stopHealingQrScanner(true));
+$('healingQrFile').addEventListener('change', event => scanHealingQrImage(event.target.files?.[0]));
+$('closeGhostQrBtn').addEventListener('click', () => stopGhostQrScanner(true));
+$('cancelGhostQrBtn').addEventListener('click', () => stopGhostQrScanner(true));
+$('ghostQrFile').addEventListener('change', (event) => scanGhostQrImage(event.target.files?.[0]));
+
 // ==========================================
 // GAMEPLAY LOGOUT
 // ==========================================
 
 $('gameplayLogoutBtn').addEventListener('click', async () => {
+    await stopGhostQrScanner(false);
+    if (ghostModeTickHandle) clearInterval(ghostModeTickHandle);
+    ghostModeTickHandle = null;
     try {
         if (accessToken) {
             await api('/api/players/logout', {
@@ -878,6 +1544,7 @@ $('gameplayLogoutBtn').addEventListener('click', async () => {
         stopGameplayCamera();
 
         gameplayOpened = false;
+        stopBaseShutdownNotificationPolling();
 
         resetPortal('Logout berhasil. Silakan login kembali.');
 
@@ -942,19 +1609,21 @@ $('leaveTeamBtn').addEventListener('click', async () => {
             })
         });
 
+        // Kembali ke Main Menu / Room Browser setelah berhasil leave.
         $('lobbyPanel').classList.add('hidden');
-        $('teamPanel').classList.remove('hidden');
+        $('teamPanel').classList.add('hidden');
+        $('roomPanel').classList.remove('hidden');
 
-        document.querySelectorAll('[data-team]').forEach(btn => {
-            btn.disabled = false;
-        });
+        // Lepaskan konteks room dan tim sebelumnya.
+        match = null;
+        window.currentPlayerTeam = null;
 
-        $('operationStatus').textContent = 'TEAM SELECTION';
+        $('operationStatus').textContent = 'ROOM BROWSER';
+        $('roomWelcome').textContent = `Logged in as ${player.full_name} (@${player.username})`;
+        $('roomPlayerName').textContent = player.username || player.full_name;
 
-        setHint(
-            'teamHint',
-            'Berhasil keluar dari tim. Silakan pilih tim kembali.'
-        );
+        showRoomHint('roomListHint', 'Berhasil keluar dari tim. Pilih room lain atau buat room baru.');
+        await loadRooms();
 
     } catch (error) {
         setHint('lobbyHint', error.message, true);
@@ -978,6 +1647,8 @@ function resetPortal(message) {
 
     stopGameplayCamera();
     stopGameplayHealthPolling();
+    stopWeaponQrScanner();
+    stopBaseShutdownNotificationPolling();
 
     gameplayOpened = false;
     shootCooldown = false;
@@ -1016,6 +1687,7 @@ function resetPortal(message) {
     saveToken(null);
 
     $('lobbyPanel').classList.add('hidden');
+    $('roomPanel').classList.add('hidden');
     $('teamPanel').classList.add('hidden');
     $('loginPanel').classList.remove('hidden');
 
