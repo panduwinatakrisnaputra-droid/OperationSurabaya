@@ -3,7 +3,6 @@
 # Jalankan: .\run.ps1 di PowerShell
 # ==========================================
 
-$VENV_UVICORN = "$PSScriptRoot\.venv\Scripts\uvicorn.exe"
 $VENV_PYTHON  = "$PSScriptRoot\.venv\Scripts\python.exe"
 
 # Pindah ke root project (direktori script ini)
@@ -38,4 +37,4 @@ Write-Host "        Docs : http://127.0.0.1:8000/docs" -ForegroundColor Green
 Write-Host "        Tekan Ctrl+C untuk berhenti." -ForegroundColor Green
 Write-Host ""
 
-& $VENV_UVICORN main:app --reload
+& $VENV_PYTHON -m uvicorn main:app --reload

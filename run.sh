@@ -9,7 +9,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 VENV_PYTHON="$SCRIPT_DIR/.venv/Scripts/python.exe"
-VENV_UVICORN="$SCRIPT_DIR/.venv/Scripts/uvicorn"
 
 echo "======================================"
 echo "  OPERATION: SURABAYA — Backend API"
@@ -41,4 +40,5 @@ echo "        Docs: http://127.0.0.1:8000/docs"
 echo "        Tekan Ctrl+C untuk berhenti."
 echo ""
 
-"$VENV_UVICORN" main:app --reload
+"$VENV_PYTHON" -m uvicorn main:app --reload
+
