@@ -5,6 +5,9 @@ from app.Models.match import (
     HealthUpdate,
     PlayerHealRequest,
     PlayerShootRequest,
+    BaseShutdownRequest,
+    GhostModeScanRequest,
+    WeaponUpgradeScanRequest,
 )
 from app.Http.Controllers import match_controller, gameplay_controller
 
@@ -31,6 +34,10 @@ def leave_team(match_id: str, data: LeaveTeamRequest):
 def get_lobby_status(match_id: str):
     return match_controller.get_lobby_status(match_id)
 
+@router.get("/{match_id}/timer")
+def get_match_timer(match_id: str):
+    return gameplay_controller.get_match_timer(match_id)
+
 # Match gameplay & health
 @router.get("/{match_id}/health")
 def get_match_health(match_id: str):
@@ -47,6 +54,28 @@ async def heal_player(match_id: str, data: PlayerHealRequest):
 @router.post("/{match_id}/shoot")
 def shoot_player(match_id: str, data: PlayerShootRequest):
     return gameplay_controller.shoot_player(match_id, data)
+
+# QR Tactical Objectives
+@router.post("/{match_id}/base-shutdown/start")
+def start_base_shutdown(match_id: str, data: BaseShutdownRequest):
+    return gameplay_controller.start_base_shutdown(match_id, data)
+
+@router.post("/{match_id}/base-shutdown/complete")
+def complete_base_shutdown(match_id: str, data: BaseShutdownRequest):
+    return gameplay_controller.complete_base_shutdown(match_id, data)
+
+@router.post("/{match_id}/ghost-mode/scan")
+def activate_ghost_mode_qr(match_id: str, data: GhostModeScanRequest):
+    return gameplay_controller.activate_ghost_mode_qr(match_id, data)
+
+# Weapon Upgrades
+@router.get("/{match_id}/weapon/{player_id}")
+def get_player_weapon(match_id: str, player_id: str):
+    return gameplay_controller.get_player_weapon(match_id, player_id)
+
+@router.post("/{match_id}/weapon/upgrade/scan")
+def scan_weapon_upgrade_qr(match_id: str, data: WeaponUpgradeScanRequest):
+    return gameplay_controller.scan_weapon_upgrade_qr(match_id, data)
 
 # Match events & analytics
 @router.get("/{match_id}/events")
