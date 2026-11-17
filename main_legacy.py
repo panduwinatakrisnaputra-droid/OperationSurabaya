@@ -1,13 +1,14 @@
 
 import os
 import asyncio
+import secrets
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
 from pydantic import BaseModel, Field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # Load environment variables
 load_dotenv()
@@ -473,8 +474,9 @@ def get_waiting_match():
 
 
 @app.post("/api/matches/{match_id}/join")
+
+@app.post("/api/matches/{match_id}/join")
 def select_team(match_id: str, selection: TeamSelection):
-    """Memasukkan pemain ke pertandingan sekaligus memilih tim."""
     try:
         # 1. Periksa pertandingan
         match_response = (
@@ -486,12 +488,14 @@ def select_team(match_id: str, selection: TeamSelection):
         )
 
         if not match_response.data:
-            raise HTTPException(status_code=404, detail="Pertandingan tidak ditemukan")
+            raise HTTPException(404, "Room tidak ditemukan")
 
         match = match_response.data[0]
 
         if match["status"] != "waiting":
-            raise HTTPException(status_code=400, detail="Pertandingan sudah tidak menerima pemain")
+            raise HTTPException(
+                400, "Room sudah tidak menerima pemain"
+            )
 
         # 2. Periksa pemain
         player_response = (
@@ -503,45 +507,73 @@ def select_team(match_id: str, selection: TeamSelection):
         )
 
         if not player_response.data:
-            raise HTTPException(status_code=404, detail="Pemain tidak ditemukan")
+            raise HTTPException(404, "Pemain tidak ditemukan")
 
-        # 3. Cari tim berdasarkan kode
+        # 3. Periksa tim tujuan
         team_response = (
             supabase.table("teams")
-            .select("id, team_code, team_name")
+            .select("id, team_code, team_name, team_color")
             .eq("team_code", selection.team_code)
             .limit(1)
             .execute()
         )
 
         if not team_response.data:
-            raise HTTPException(status_code=404, detail="Tim tidak ditemukan")
+            raise HTTPException(404, "Tim tidak ditemukan")
 
         team = team_response.data[0]
 
-        # 4. Periksa apakah pemain sudah masuk pertandingan ini
-        existing = (
+        # 4. Ambil anggota room
+        members_response = (
             supabase.table("match_players")
-            .select("id")
+            .select("id, player_id, team_id")
             .eq("match_id", match_id)
-            .eq("player_id", selection.player_id)
-            .limit(1)
             .execute()
         )
 
-        # 5. Periksa kapasitas jika pemain baru bergabung
-        if not existing.data:
-            members = (
+        members = members_response.data or []
+
+        # 5. Periksa keanggotaan pemain
+        existing = next(
+            (
+                member for member in members
+                if member["player_id"] == selection.player_id
+            ),
+            None
+        )
+
+        # 6. Hitung jumlah pemain di tim tujuan
+        team_members = [
+            member for member in members
+            if member["team_id"] == team["id"]
+            and member["player_id"] != selection.player_id
+        ]
+
+        team_capacity = (
+            match["red_capacity"]
+            if selection.team_code == "RED"
+            else match["blue_capacity"]
+        )
+
+        if len(team_members) >= team_capacity:
+            # Pemain yang sudah berada di tim tersebut
+            # tetap boleh mengakses room
+            if not existing or existing["team_id"] != team["id"]:
+                raise HTTPException(
+                    400,
+                    f"{team['team_name']} sudah penuh"
+                )
+
+        # 7. Masukkan pemain atau perbarui tim
+        if existing:
+            result = (
                 supabase.table("match_players")
-                .select("id")
+                .update({"team_id": team["id"]})
                 .eq("match_id", match_id)
+                .eq("player_id", selection.player_id)
                 .execute()
             )
-
-            if len(members.data) >= match["max_players"]:
-                raise HTTPException(status_code=400, detail="Lobby sudah penuh")
-
-            # 6. Masukkan pemain ke pertandingan
+        else:
             result = (
                 supabase.table("match_players")
                 .insert({
@@ -549,21 +581,8 @@ def select_team(match_id: str, selection: TeamSelection):
                     "player_id": selection.player_id,
                     "team_id": team["id"],
                     "player_status": "joined",
-                    "current_health": 100,
-                    "max_health": 100,
-                    "is_eliminated": False,
-                    "is_healing": False
+                    "is_host": False
                 })
-                .execute()
-            )
-
-        else:
-            # Pemain sudah bergabung: perbarui pilihan tim
-            result = (
-                supabase.table("match_players")
-                .update({"team_id": team["id"]})
-                .eq("match_id", match_id)
-                .eq("player_id", selection.player_id)
                 .execute()
             )
 
@@ -573,6 +592,8 @@ def select_team(match_id: str, selection: TeamSelection):
             "match_id": match_id,
             "player": player_response.data[0],
             "team": team,
+            "team_total": len(team_members) + 1,
+            "team_capacity": team_capacity,
             "data": result.data
         }
 
@@ -580,7 +601,11 @@ def select_team(match_id: str, selection: TeamSelection):
         raise
 
     except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error))
+        print("JOIN ROOM ERROR:", repr(error))
+        raise HTTPException(
+            status_code=500,
+            detail=str(error)
+        )
 
 # ==========================================
 # LEAVE TEAM API
@@ -1021,6 +1046,7 @@ def get_match_health(match_id: str):
                 "max_health": member.get("max_health", 100),
                 "is_eliminated": member.get("is_eliminated", False),
                 "is_healing": member.get("is_healing", False),
+                "ghost_mode_until": member.get("ghost_mode_until"),
                 "player_status": member.get("player_status")
             })
 
@@ -1094,6 +1120,27 @@ def update_player_health(match_id: str, data: HealthUpdate):
                 detail="Pemain sudah tereliminasi"
             )
 
+        # Ghost Mode memberikan kekebalan penuh terhadap damage, tanpa melarang pemain menembak.
+        ghost_until = member.get("ghost_mode_until")
+        if ghost_until:
+            try:
+                ghost_expiry = datetime.fromisoformat(str(ghost_until).replace("Z", "+00:00"))
+                if ghost_expiry > datetime.now(timezone.utc):
+                    remaining = max(1, int((ghost_expiry - datetime.now(timezone.utc)).total_seconds()))
+                    return {
+                        "success": True,
+                        "message": "Serangan tidak memberikan damage karena Ghost Mode aktif",
+                        "player_id": data.player_id,
+                        "current_health": member.get("current_health", 100),
+                        "damage_applied": 0,
+                        "blocked_by_ghost_mode": True,
+                        "ghost_mode_until": ghost_until,
+                        "ghost_mode_remaining_seconds": remaining
+                    }
+            except (TypeError, ValueError):
+                # Timestamp yang tidak valid tidak boleh membuat pemain kebal tanpa batas.
+                pass
+
         # 3. Hitung HP baru
         current_hp = member.get("current_health") or 0
         max_hp = member.get("max_health") or 100
@@ -1144,179 +1191,469 @@ def update_player_health(match_id: str, data: HealthUpdate):
         )
 
 # ==========================================
-# PLAYER HEALING API
+# PLAYER HEALING API - BASE QR + POSE VALIDATION
 # ==========================================
 
 class PlayerHealRequest(BaseModel):
-    player_id: str
+    player_id: str = Field(min_length=1)
+    qr_payload: str = Field(min_length=1, max_length=300)
+    pose_verified: bool = False
 
 
 @app.post("/api/matches/{match_id}/heal")
-async def heal_player(match_id: str, data: PlayerHealRequest):
-    """Memulihkan 20 HP setelah proses healing selama 5 detik."""
-    healing_started = False
-
+def heal_player(match_id: str, data: PlayerHealRequest):
+    """Memulihkan HP setelah QR base tervalidasi dan pose detection menyatakan pose benar."""
     try:
-        # 1. Pastikan pertandingan sedang aktif
-        match_response = (
-            supabase.table("matches")
-            .select("id, status")
-            .eq("id", match_id)
-            .limit(1)
-            .execute()
-        )
-
+        match_response = (supabase.table("matches").select("id, status")
+            .eq("id", match_id).limit(1).execute())
         if not match_response.data:
             raise HTTPException(status_code=404, detail="Pertandingan tidak ditemukan")
+        if match_response.data[0].get("status") != "active":
+            raise HTTPException(status_code=400, detail="Healing hanya tersedia saat pertandingan aktif")
 
-        if match_response.data[0]["status"] != "active":
-            raise HTTPException(status_code=400, detail="Pertandingan belum aktif")
+        prefix = "OPS-HEALING:"
+        payload = data.qr_payload.strip()
+        if not payload.startswith(prefix):
+            raise HTTPException(status_code=400, detail="QR Code bukan QR Healing Base")
+        station_code = payload[len(prefix):].strip()
+        if not station_code:
+            raise HTTPException(status_code=400, detail="Kode Healing Station tidak valid")
 
-        # 2. Ambil data pemain dalam pertandingan
-        member_response = (
-            supabase.table("match_players")
-            .select("*")
-            .eq("match_id", match_id)
-            .eq("player_id", data.player_id)
-            .limit(1)
-            .execute()
-        )
+        station_response = (supabase.table("healing_stations")
+            .select("station_code, station_name, team_code, heal_amount, is_active")
+            .eq("station_code", station_code).limit(1).execute())
+        if not station_response.data or not station_response.data[0].get("is_active"):
+            raise HTTPException(status_code=404, detail="Healing Station tidak ditemukan atau nonaktif")
+        station = station_response.data[0]
 
+        member_response = (supabase.table("match_players")
+            .select("player_id, team_id, player_status, current_health, max_health, is_eliminated, is_healing")
+            .eq("match_id", match_id).eq("player_id", data.player_id).limit(1).execute())
         if not member_response.data:
-            raise HTTPException(status_code=404, detail="Pemain tidak ditemukan dalam pertandingan")
-
+            raise HTTPException(status_code=403, detail="Pemain tidak tergabung dalam pertandingan")
         member = member_response.data[0]
+
+        team_response = (supabase.table("teams").select("team_code")
+            .eq("id", member.get("team_id")).limit(1).execute())
+        if not team_response.data:
+            raise HTTPException(status_code=400, detail="Tim pemain tidak dapat diverifikasi")
+        player_team = str(team_response.data[0].get("team_code", "")).upper()
+        if player_team != str(station.get("team_code", "")).upper():
+            raise HTTPException(status_code=403, detail="Healing hanya dapat dilakukan di base tim sendiri")
+
         current_hp = member.get("current_health") if member.get("current_health") is not None else 100
         max_hp = member.get("max_health") or 100
-
-        if member.get("is_eliminated") or current_hp <= 0:
-            raise HTTPException(status_code=400, detail="Pemain sudah tereliminasi dan tidak bisa healing")
-
+        if member.get("is_eliminated") or member.get("player_status") == "eliminated" or current_hp <= 0:
+            raise HTTPException(status_code=400, detail="Pemain tereliminasi dan tidak bisa healing")
         if current_hp >= max_hp:
             raise HTTPException(status_code=400, detail="Health pemain sudah maksimal")
-
         if member.get("is_healing"):
             raise HTTPException(status_code=409, detail="Pemain sedang melakukan healing")
+        if not data.pose_verified:
+            raise HTTPException(status_code=400, detail="Pose healing belum berhasil divalidasi")
 
-        # 3. Tandai proses healing. Kondisi is_healing=false mencegah
-        # dua permintaan healing berjalan bersamaan untuk pemain yang sama.
-        start_response = (
-            supabase.table("match_players")
-            .update({"is_healing": True})
-            .eq("match_id", match_id)
-            .eq("player_id", data.player_id)
-            .eq("is_healing", False)
-            .eq("is_eliminated", False)
-            .execute()
-        )
-
-        if not start_response.data:
+        # Kunci status untuk mencegah dua proses healing bersamaan.
+        lock_response = (supabase.table("match_players").update({"is_healing": True})
+            .eq("match_id", match_id).eq("player_id", data.player_id)
+            .eq("is_healing", False).eq("is_eliminated", False).execute())
+        if not lock_response.data:
             raise HTTPException(status_code=409, detail="Healing tidak dapat dimulai. Periksa status pemain.")
 
-        healing_started = True
-
-        # 4. Durasi healing 5 detik (tanpa AI/gesture detection)
-        await asyncio.sleep(5)
-
-        # 5. Pastikan pertandingan masih aktif dan pemain belum tereliminasi
-        latest_match = (
-            supabase.table("matches")
-            .select("status")
-            .eq("id", match_id)
-            .limit(1)
-            .execute()
-        )
-
-        latest_member = (
-            supabase.table("match_players")
-            .select("current_health, max_health, is_eliminated")
-            .eq("match_id", match_id)
-            .eq("player_id", data.player_id)
-            .limit(1)
-            .execute()
-        )
-
-        if not latest_match.data or latest_match.data[0]["status"] != "active":
-            raise HTTPException(status_code=400, detail="Pertandingan sudah tidak aktif. Healing dibatalkan.")
-
-        if not latest_member.data:
-            raise HTTPException(status_code=404, detail="Data pemain tidak ditemukan setelah healing")
-
-        latest = latest_member.data[0]
-        latest_hp = latest.get("current_health") if latest.get("current_health") is not None else 100
-        latest_max_hp = latest.get("max_health") or 100
-
-        if latest.get("is_eliminated") or latest_hp <= 0:
-            raise HTTPException(status_code=400, detail="Pemain tereliminasi saat proses healing. Healing dibatalkan.")
-
-        # 6. Tambahkan 20 HP, maksimal 100 HP
-        new_hp = min(latest_max_hp, latest_hp + 20)
-
-        update_response = (
-            supabase.table("match_players")
-            .update({
-                "current_health": new_hp,
-                "is_healing": False
-            })
-            .eq("match_id", match_id)
-            .eq("player_id", data.player_id)
-            .eq("is_eliminated", False)
-            .execute()
-        )
-
+        amount = max(1, min(int(station.get("heal_amount") or 20), 100))
+        new_hp = min(max_hp, current_hp + amount)
+        update_response = (supabase.table("match_players")
+            .update({"current_health": new_hp, "is_healing": False})
+            .eq("match_id", match_id).eq("player_id", data.player_id)
+            .eq("is_eliminated", False).execute())
         if not update_response.data:
-            raise HTTPException(status_code=409, detail="Gagal menyelesaikan healing. Status pemain berubah.")
+            supabase.table("match_players").update({"is_healing": False}).eq("match_id", match_id).eq("player_id", data.player_id).execute()
+            raise HTTPException(status_code=409, detail="Gagal menyelesaikan healing")
 
-        healing_started = False
-
-        # 7. Catat healing yang berhasil ke game_events
-        healed_amount = new_hp - latest_hp
-
+        healed_amount = new_hp - current_hp
         try:
             supabase.table("game_events").insert({
-                "match_id": match_id,
-                "actor_player_id": data.player_id,
-                "target_player_id": None,
+                "match_id": match_id, "actor_player_id": data.player_id,
                 "event_type": "player_heal",
-                "description": f"Pemain berhasil memulihkan {healed_amount} HP",
-                "event_data": {
-                    "healed_amount": healed_amount,
-                    "current_health": new_hp,
-                    "max_health": latest_max_hp
-                }
+                "description": f"Pemain memulihkan {healed_amount} HP di base {player_team}",
+                "event_data": {"station_code": station_code, "team_code": player_team,
+                    "healed_amount": healed_amount, "current_health": new_hp, "max_health": max_hp,
+                    "pose_verified": True}
             }).execute()
-
         except Exception as event_error:
             print("HEAL EVENT ERROR:", repr(event_error))
 
-        return {
-            "success": True,
-            "message": "Healing berhasil diselesaikan",
-            "healing_duration_seconds": 5,
-            "healed_amount": healed_amount,
-            "current_health": new_hp,
-            "max_health": latest_max_hp,
-            "is_healing": False,
-            "is_eliminated": False
-        }
-
+        return {"success": True, "message": f"Healing berhasil! +{healed_amount} HP",
+            "station_code": station_code, "healed_amount": healed_amount,
+            "current_health": new_hp, "max_health": max_hp, "is_healing": False}
     except HTTPException:
         raise
-
     except Exception as error:
         print("HEALING ERROR:", repr(error))
         raise HTTPException(status_code=500, detail="Terjadi kesalahan saat memproses healing")
 
-    finally:
-        # Pastikan indikator healing tidak tertinggal aktif jika proses gagal.
-        if healing_started:
+
+# ==========================================
+
+
+# ==========================================
+# BASE SHUTDOWN API
+# ==========================================
+class BaseShutdownRequest(BaseModel):
+    player_id: str = Field(min_length=1)
+    qr_payload: str = Field(min_length=1, max_length=300)
+
+@app.post("/api/matches/{match_id}/base-shutdown/start")
+def start_base_shutdown(match_id: str, data: BaseShutdownRequest):
+    """Validasi awal dan umumkan ancaman shutdown ke tim pemilik base."""
+    try:
+        match_res = supabase.table("matches").select("id,status").eq("id", match_id).limit(1).execute()
+        if not match_res.data:
+            raise HTTPException(status_code=404, detail="Pertandingan tidak ditemukan")
+        if match_res.data[0].get("status") != "active":
+            raise HTTPException(status_code=400, detail="Pertandingan tidak aktif atau sudah berakhir")
+
+        payload = data.qr_payload.strip()
+        prefix = "OPS-BASE-SHUTDOWN:"
+        if not payload.startswith(prefix):
+            raise HTTPException(status_code=400, detail="QR bukan QR Base Shutdown")
+        station_code = payload[len(prefix):].strip()
+        station_res = supabase.table("base_shutdown_stations").select("station_code,team_code,is_active").eq("station_code", station_code).limit(1).execute()
+        if not station_res.data or not station_res.data[0].get("is_active"):
+            raise HTTPException(status_code=404, detail="QR Base Shutdown tidak ditemukan atau nonaktif")
+
+        member_res = supabase.table("match_players").select("player_id,team_id,player_status,is_eliminated,current_health").eq("match_id", match_id).eq("player_id", data.player_id).limit(1).execute()
+        if not member_res.data:
+            raise HTTPException(status_code=403, detail="Pemain tidak tergabung dalam pertandingan")
+        member = member_res.data[0]
+        team_res = supabase.table("teams").select("team_code").eq("id", member.get("team_id")).limit(1).execute()
+        if not team_res.data:
+            raise HTTPException(status_code=400, detail="Tim pemain tidak dapat diverifikasi")
+
+        attacker = str(team_res.data[0].get("team_code", "")).upper()
+        defender = str(station_res.data[0].get("team_code", "")).upper()
+        if attacker not in ("RED", "BLUE") or defender not in ("RED", "BLUE"):
+            raise HTTPException(status_code=400, detail="Identitas tim tidak valid")
+        if attacker == defender:
+            raise HTTPException(status_code=403, detail="Kamu tidak dapat menonaktifkan base tim sendiri")
+        if member.get("is_eliminated") or member.get("player_status") == "eliminated" or (member.get("current_health") or 0) <= 0:
+            raise HTTPException(status_code=400, detail="Pemain tereliminasi tidak dapat melakukan shutdown")
+
+        event = supabase.table("game_events").insert({
+            "match_id": match_id,
+            "actor_player_id": data.player_id,
+            "event_type": "base_shutdown_started",
+            "description": f"Tim {attacker} memulai proses shutdown Base {defender}",
+            "event_data": {
+                "station_code": station_code,
+                "attacker_team_code": attacker,
+                "defender_team_code": defender,
+                "duration_seconds": 60
+            }
+        }).execute()
+        return {"success": True, "message": f"Proses shutdown Base {defender} dimulai", "attacker_team_code": attacker, "defender_team_code": defender, "event": event.data[0] if event.data else None}
+    except HTTPException:
+        raise
+    except Exception as error:
+        print("BASE SHUTDOWN START ERROR:", repr(error))
+        raise HTTPException(status_code=500, detail="Gagal memulai proses Base Shutdown")
+
+
+@app.post("/api/matches/{match_id}/base-shutdown/complete")
+def complete_base_shutdown(match_id: str, data: BaseShutdownRequest):
+    """Finalisasi shutdown base setelah countdown di Player Portal selesai."""
+    try:
+        match_res = supabase.table("matches").select("id,status,winner_team_code").eq("id", match_id).limit(1).execute()
+        if not match_res.data: raise HTTPException(status_code=404, detail="Pertandingan tidak ditemukan")
+        if match_res.data[0].get("status") != "active": raise HTTPException(status_code=400, detail="Pertandingan tidak aktif atau sudah berakhir")
+        prefix = "OPS-BASE-SHUTDOWN:"; payload = data.qr_payload.strip()
+        if not payload.startswith(prefix): raise HTTPException(status_code=400, detail="QR bukan QR Base Shutdown")
+        station_code = payload[len(prefix):].strip()
+        station_res = supabase.table("base_shutdown_stations").select("station_code,team_code,is_active").eq("station_code", station_code).limit(1).execute()
+        if not station_res.data or not station_res.data[0].get("is_active"): raise HTTPException(status_code=404, detail="QR Base Shutdown tidak ditemukan atau nonaktif")
+        station = station_res.data[0]
+        member_res = supabase.table("match_players").select("player_id,team_id,player_status,is_eliminated,current_health").eq("match_id",match_id).eq("player_id",data.player_id).limit(1).execute()
+        if not member_res.data: raise HTTPException(status_code=403, detail="Pemain tidak tergabung dalam pertandingan")
+        member=member_res.data[0]
+        team_res=supabase.table("teams").select("team_code").eq("id",member.get("team_id")).limit(1).execute()
+        if not team_res.data: raise HTTPException(status_code=400, detail="Tim pemain tidak dapat diverifikasi")
+        attacker=str(team_res.data[0].get("team_code","")).upper(); defender=str(station.get("team_code","")).upper()
+        if attacker == defender: raise HTTPException(status_code=403, detail="Kamu tidak dapat menonaktifkan base tim sendiri")
+        if attacker not in ("RED","BLUE") or defender not in ("RED","BLUE"): raise HTTPException(status_code=400, detail="Identitas tim tidak valid")
+        if member.get("is_eliminated") or member.get("player_status")=="eliminated" or (member.get("current_health") or 0)<=0: raise HTTPException(status_code=400, detail="Pemain tereliminasi tidak dapat melakukan shutdown")
+        # Unique key match_id prevents two teams/players from completing the same objective twice.
+        try:
+            supabase.table("base_shutdowns").insert({"match_id":match_id,"station_code":station_code,"attacker_team_code":attacker,"defender_team_code":defender,"player_id":data.player_id,"status":"completed"}).execute()
+        except Exception:
+            raise HTTPException(status_code=409, detail="Base sudah dinonaktifkan atau proses shutdown sudah diselesaikan")
+        update=supabase.table("matches").update({"status":"completed","ended_at":datetime.now(timezone.utc).isoformat(),"winner_team_code":attacker}).eq("id",match_id).eq("status","active").execute()
+        if not update.data: raise HTTPException(status_code=409, detail="Pertandingan sudah diselesaikan oleh proses lain")
+        supabase.table("game_events").insert({"match_id":match_id,"actor_player_id":data.player_id,"event_type":"base_shutdown_success","description":f"Tim {attacker} berhasil menonaktifkan base {defender} dan memenangkan pertandingan","event_data":{"station_code":station_code,"attacker_team_code":attacker,"defender_team_code":defender}}).execute()
+        return {"success":True,"message":f"BASE {defender} BERHASIL DINONAKTIFKAN. TIM {attacker} MENANG!","winner_team_code":attacker,"defeated_team_code":defender,"match_status":"completed"}
+    except HTTPException: raise
+    except Exception as error:
+        print("BASE SHUTDOWN ERROR:",repr(error));raise HTTPException(status_code=500,detail="Terjadi kesalahan saat memproses Base Shutdown")
+
+
+# PLAYER GHOST MODE API
+# ==========================================
+
+class GhostModeScanRequest(BaseModel):
+    player_id: str = Field(min_length=1)
+    qr_payload: str = Field(min_length=1, max_length=300)
+
+
+@app.post("/api/matches/{match_id}/ghost-mode/scan")
+def activate_ghost_mode_qr(match_id: str, data: GhostModeScanRequest):
+    """Aktifkan Ghost Mode melalui QR treasure; satu kali per pemain per pertandingan."""
+    try:
+        match_response = (supabase.table("matches").select("id, status")
+            .eq("id", match_id).limit(1).execute())
+        if not match_response.data:
+            raise HTTPException(status_code=404, detail="Pertandingan tidak ditemukan")
+        if match_response.data[0].get("status") != "active":
+            raise HTTPException(status_code=400, detail="Ghost Mode hanya dapat diambil saat pertandingan aktif")
+
+        prefix = "OPS-GHOST-MODE:"
+        payload = data.qr_payload.strip()
+        if not payload.startswith(prefix):
+            raise HTTPException(status_code=400, detail="QR Code bukan QR Treasure Ghost Mode")
+        station_code = payload[len(prefix):].strip()
+        if not station_code or len(station_code) > 80:
+            raise HTTPException(status_code=400, detail="Kode treasure tidak valid")
+
+        station_response = (supabase.table("ghost_mode_stations")
+            .select("station_code, station_name, duration_seconds, is_active")
+            .eq("station_code", station_code).limit(1).execute())
+        if not station_response.data or not station_response.data[0].get("is_active"):
+            raise HTTPException(status_code=404, detail="Treasure Ghost Mode tidak ditemukan atau nonaktif")
+        station = station_response.data[0]
+
+        member_response = (supabase.table("match_players")
+            .select("player_id, player_status, is_eliminated, ghost_mode_until")
+            .eq("match_id", match_id).eq("player_id", data.player_id).limit(1).execute())
+        if not member_response.data:
+            raise HTTPException(status_code=403, detail="Pemain tidak tergabung dalam pertandingan")
+        member = member_response.data[0]
+        if member.get("is_eliminated") or member.get("player_status") == "eliminated":
+            raise HTTPException(status_code=400, detail="Pemain tereliminasi tidak dapat mengambil Ghost Mode")
+
+        now = datetime.now(timezone.utc)
+        current_until = member.get("ghost_mode_until")
+        if current_until:
             try:
-                supabase.table("match_players").update({"is_healing": False})\
-                    .eq("match_id", match_id)\
-                    .eq("player_id", data.player_id)\
-                    .execute()
-            except Exception as cleanup_error:
-                print("HEALING CLEANUP ERROR:", repr(cleanup_error))
+                expiry = datetime.fromisoformat(str(current_until).replace("Z", "+00:00"))
+                if expiry > now:
+                    raise HTTPException(status_code=409, detail="Ghost Mode masih aktif")
+            except ValueError:
+                pass
+
+        # Unique constraint pada tabel scan mencegah QR treasure dipakai ulang pemain yang sama.
+        try:
+            supabase.table("ghost_mode_scans").insert({
+                "match_id": match_id, "player_id": data.player_id, "station_code": station_code
+            }).execute()
+        except Exception:
+            raise HTTPException(status_code=409, detail="Treasure Ghost Mode ini sudah pernah diambil pada pertandingan ini")
+
+        duration = max(1, min(int(station.get("duration_seconds") or 30), 3600))
+        expires_at = now + timedelta(seconds=duration)
+        update_response = (supabase.table("match_players")
+            .update({"ghost_mode_until": expires_at.isoformat()})
+            .eq("match_id", match_id).eq("player_id", data.player_id).execute())
+        if not update_response.data:
+            raise HTTPException(status_code=500, detail="Gagal mengaktifkan Ghost Mode")
+
+        supabase.table("game_events").insert({
+            "match_id": match_id,
+            "actor_player_id": data.player_id,
+            "event_type": "ghost_mode_activated",
+            "description": f"Pemain mengaktifkan Ghost Mode selama {duration} detik",
+            "event_data": {"station_code": station_code, "duration_seconds": duration, "ghost_mode_until": expires_at.isoformat()}
+        }).execute()
+
+        return {
+            "success": True,
+            "message": f"Ghost Mode aktif selama {duration} detik! Kamu kebal terhadap serangan.",
+            "player_id": data.player_id,
+            "duration_seconds": duration,
+            "ghost_mode_until": expires_at.isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as error:
+        print("GHOST MODE ERROR:", repr(error))
+        raise HTTPException(status_code=500, detail="Terjadi kesalahan saat mengaktifkan Ghost Mode")
+
+
+# ==========================================
+# PLAYER WEAPON API
+# ==========================================
+
+WEAPON_DAMAGE_BY_LEVEL = {1: 10, 2: 15, 3: 20, 4: 25}
+
+@app.get("/api/matches/{match_id}/weapon/{player_id}")
+def get_player_weapon(match_id: str, player_id: str):
+    try:
+        match_response = (supabase.table("matches").select("id, status")
+            .eq("id", match_id).limit(1).execute())
+        if not match_response.data:
+            raise HTTPException(status_code=404, detail="Pertandingan tidak ditemukan")
+
+        member_response = (supabase.table("match_players")
+            .select("player_id, weapon_level, player_status, is_eliminated")
+            .eq("match_id", match_id).eq("player_id", player_id)
+            .limit(1).execute())
+        if not member_response.data:
+            raise HTTPException(status_code=404, detail="Pemain tidak ditemukan dalam pertandingan")
+
+        member = member_response.data[0]
+        level = int(member.get("weapon_level") or 1)
+        return {
+            "success": True,
+            "player_id": player_id,
+            "weapon_name": f"TACTICAL RIFLE MK-{level}",
+            "weapon_level": level,
+            "damage": WEAPON_DAMAGE_BY_LEVEL.get(level, 10),
+            "available_levels": [
+                {"level": key, "damage": value}
+                for key, value in WEAPON_DAMAGE_BY_LEVEL.items()
+            ]
+        }
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
+
+
+class WeaponLevelUpdate(BaseModel):
+    player_id: str = Field(min_length=1)
+    weapon_level: int = Field(ge=1, le=4)
+
+
+class WeaponUpgradeScanRequest(BaseModel):
+    player_id: str = Field(min_length=1)
+    qr_payload: str = Field(min_length=1, max_length=300)
+
+
+@app.post("/api/matches/{match_id}/weapon/upgrade/scan")
+def scan_weapon_upgrade_qr(match_id: str, data: WeaponUpgradeScanRequest):
+    """Upgrade satu level melalui QR station yang terdaftar; setiap station hanya sekali per pemain per match."""
+    try:
+        match_response = (supabase.table("matches").select("id, status")
+            .eq("id", match_id).limit(1).execute())
+        if not match_response.data:
+            raise HTTPException(status_code=404, detail="Pertandingan tidak ditemukan")
+        if match_response.data[0].get("status") != "active":
+            raise HTTPException(status_code=400, detail="Upgrade hanya tersedia saat pertandingan aktif")
+
+        prefix = "OPS-WEAPON-UPGRADE:"
+        payload = data.qr_payload.strip()
+        if not payload.startswith(prefix):
+            raise HTTPException(status_code=400, detail="QR Code bukan QR Weapon Upgrade")
+        station_code = payload[len(prefix):].strip()
+        if not station_code or len(station_code) > 80:
+            raise HTTPException(status_code=400, detail="Kode stasiun tidak valid")
+
+        station_response = (supabase.table("weapon_upgrade_stations")
+            .select("station_code, station_name, is_active")
+            .eq("station_code", station_code).limit(1).execute())
+        if not station_response.data or not station_response.data[0].get("is_active"):
+            raise HTTPException(status_code=404, detail="Weapon Upgrade Station tidak ditemukan atau nonaktif")
+        station = station_response.data[0]
+
+        member_response = (supabase.table("match_players")
+            .select("player_id, weapon_level, player_status, is_eliminated")
+            .eq("match_id", match_id).eq("player_id", data.player_id).limit(1).execute())
+        if not member_response.data:
+            raise HTTPException(status_code=404, detail="Pemain tidak terdaftar dalam pertandingan")
+        member = member_response.data[0]
+        if member.get("is_eliminated") or member.get("player_status") == "eliminated":
+            raise HTTPException(status_code=400, detail="Pemain yang tereliminasi tidak dapat upgrade senjata")
+
+        current_level = int(member.get("weapon_level") or 1)
+        if current_level >= 4:
+            raise HTTPException(status_code=400, detail="Level senjata sudah maksimum")
+
+        # Catatan unik mencegah pemain memakai QR station yang sama berulang kali.
+        try:
+            supabase.table("weapon_upgrade_scans").insert({
+                "match_id": match_id,
+                "player_id": data.player_id,
+                "station_code": station_code
+            }).execute()
+        except Exception:
+            raise HTTPException(status_code=409, detail="QR station ini sudah pernah digunakan oleh pemain pada pertandingan ini")
+
+        new_level = current_level + 1
+        damage = WEAPON_DAMAGE_BY_LEVEL[new_level]
+        update_response = (supabase.table("match_players")
+            .update({"weapon_level": new_level})
+            .eq("match_id", match_id).eq("player_id", data.player_id).execute())
+        if not update_response.data:
+            raise HTTPException(status_code=500, detail="Gagal menyimpan level senjata")
+
+        supabase.table("game_events").insert({
+            "match_id": match_id,
+            "actor_player_id": data.player_id,
+            "event_type": "weapon_upgrade",
+            "description": f"Pemain upgrade senjata ke Level {new_level} melalui {station.get('station_name') or station_code}",
+            "event_data": {
+                "station_code": station_code,
+                "station_name": station.get("station_name"),
+                "previous_level": current_level,
+                "weapon_level": new_level,
+                "damage": damage,
+                "source": "qr_code"
+            }
+        }).execute()
+
+        return {
+            "success": True,
+            "message": f"Upgrade berhasil! Senjata sekarang Level {new_level}",
+            "player_id": data.player_id,
+            "station_code": station_code,
+            "weapon_name": f"TACTICAL RIFLE MK-{new_level}",
+            "weapon_level": new_level,
+            "damage": damage
+        }
+    except HTTPException:
+        raise
+    except Exception as error:
+        print("WEAPON QR UPGRADE ERROR:", repr(error))
+        raise HTTPException(status_code=500, detail="Terjadi kesalahan saat memproses QR upgrade")
+
+
+@app.patch("/api/admin/matches/{match_id}/weapon")
+def admin_update_weapon_level(match_id: str, data: WeaponLevelUpdate):
+    """Endpoint kontrol admin untuk pengujian level senjata. Tambahkan autentikasi admin sebelum produksi."""
+    try:
+        match_response = (supabase.table("matches").select("id, status")
+            .eq("id", match_id).limit(1).execute())
+        if not match_response.data:
+            raise HTTPException(status_code=404, detail="Pertandingan tidak ditemukan")
+        if match_response.data[0].get("status") != "active":
+            raise HTTPException(status_code=400, detail="Senjata hanya dapat diubah saat pertandingan aktif")
+
+        update_response = (supabase.table("match_players")
+            .update({"weapon_level": data.weapon_level})
+            .eq("match_id", match_id).eq("player_id", data.player_id).execute())
+        if not update_response.data:
+            raise HTTPException(status_code=404, detail="Pemain tidak ditemukan dalam pertandingan")
+
+        damage = WEAPON_DAMAGE_BY_LEVEL[data.weapon_level]
+        supabase.table("game_events").insert({
+            "match_id": match_id,
+            "actor_player_id": data.player_id,
+            "event_type": "weapon_upgrade",
+            "description": f"Level senjata pemain ditetapkan ke Level {data.weapon_level}",
+            "event_data": {"weapon_level": data.weapon_level, "damage": damage}
+        }).execute()
+        return {"success": True, "message": "Level senjata berhasil diperbarui",
+                "player_id": data.player_id, "weapon_level": data.weapon_level, "damage": damage}
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
 
 
 # ==========================================
@@ -1348,7 +1685,7 @@ def shoot_player(match_id: str, data: PlayerShootRequest):
         # 2. Pastikan pemain terdaftar di pertandingan
         member_response = (
             supabase.table("match_players")
-            .select("player_id, current_health, is_eliminated")
+            .select("player_id, current_health, is_eliminated, weapon_level")
             .eq("match_id", match_id)
             .eq("player_id", data.player_id)
             .limit(1)
@@ -1362,7 +1699,11 @@ def shoot_player(match_id: str, data: PlayerShootRequest):
         if member.get("is_eliminated") or (member.get("current_health") is not None and member.get("current_health") <= 0):
             raise HTTPException(status_code=400, detail="Pemain sudah tereliminasi dan tidak dapat menembak")
 
-        # 3. Ambil identitas pemain untuk deskripsi Event Log
+        # 3. Ambil level senjata dan damage dasar
+        weapon_level = int(member.get("weapon_level") or 1)
+        weapon_damage = {1: 10, 2: 15, 3: 20, 4: 25}.get(weapon_level, 10)
+
+        # 4. Ambil identitas pemain untuk deskripsi Event Log
         player_response = (
             supabase.table("players")
             .select("username, full_name")
@@ -1383,8 +1724,14 @@ def shoot_player(match_id: str, data: PlayerShootRequest):
                 "actor_player_id": data.player_id,
                 "target_player_id": None,
                 "event_type": "player_shot",
-                "description": f"{player_name} melakukan tembakan",
-                "event_data": {"action": "shoot"}
+                "description": f"{player_name} melakukan tembakan (Weapon Lv.{weapon_level})",
+                "event_data": {
+                    "action": "shoot",
+                    "weapon_level": weapon_level,
+                    "weapon_damage": weapon_damage,
+                    "result": "shot_recorded",
+                    "note": "Belum dihitung sebagai hit; menunggu integrasi target detection AI"
+                }
             })
             .execute()
         )
@@ -1392,6 +1739,9 @@ def shoot_player(match_id: str, data: PlayerShootRequest):
         return {
             "success": True,
             "message": "Aktivitas tembakan berhasil dicatat",
+            "weapon_level": weapon_level,
+            "weapon_damage": weapon_damage,
+            "result": "shot_recorded",
             "event": event_response.data[0] if event_response.data else None
         }
 
@@ -1670,3 +2020,486 @@ def get_player_analytics(match_id: str):
             status_code=500,
             detail="Gagal mengambil data Player Analytics"
         )
+
+    
+# ==========================================
+# ROOM BROWSER API
+# ==========================================
+
+@app.get("/api/rooms")
+def get_rooms(
+    status: str = "all",
+    search: str = "",
+    page: int = 1,
+    page_size: int = 20
+):
+    try:
+        # Validasi parameter
+        allowed_status = [
+            "all", "waiting", "active",
+            "completed", "cancelled"
+        ]
+
+        if status not in allowed_status:
+            raise HTTPException(
+                status_code=400,
+                detail="Status room tidak valid"
+            )
+
+        if page < 1 or page_size < 1 or page_size > 100:
+            raise HTTPException(
+                status_code=400,
+                detail="Parameter halaman tidak valid"
+            )
+
+        # 1. Ambil data room
+        query = (
+            supabase.table("matches")
+            .select("*", count="exact")
+            .order("created_at", desc=True)
+        )
+
+        if status != "all":
+            query = query.eq("status", status)
+
+        if search.strip():
+            keyword = search.strip().replace(",", "")
+            query = query.or_(
+                f"match_name.ilike.%{keyword}%,"
+                f"room_code.ilike.%{keyword}%"
+            )
+
+        start = (page - 1) * page_size
+        end = start + page_size - 1
+
+        response = query.range(start, end).execute()
+
+        matches = response.data or []
+        total_rooms = response.count or 0
+
+        if not matches:
+            return {
+                "success": True,
+                "total_rooms": total_rooms,
+                "page": page,
+                "page_size": page_size,
+                "data": []
+            }
+
+        # 2. Ambil ID pertandingan
+        match_ids = [m["id"] for m in matches]
+
+        # 3. Ambil seluruh anggota room
+        members_response = (
+            supabase.table("match_players")
+            .select("match_id, team_id")
+            .in_("match_id", match_ids)
+            .execute()
+        )
+
+        members = members_response.data or []
+
+        # 4. Ambil identitas tim
+        teams_response = (
+            supabase.table("teams")
+            .select("id, team_code")
+            .execute()
+        )
+
+        teams = teams_response.data or []
+
+        team_map = {
+            team["id"]: team["team_code"]
+            for team in teams
+        }
+
+        # 5. Hitung anggota setiap room
+        room_counts = {}
+
+        for match in matches:
+            room_counts[match["id"]] = {
+                "red": 0,
+                "blue": 0
+            }
+
+        for member in members:
+            match_id = member["match_id"]
+            team_code = team_map.get(member["team_id"])
+
+            if match_id not in room_counts:
+                continue
+
+            if team_code == "RED":
+                room_counts[match_id]["red"] += 1
+
+            elif team_code == "BLUE":
+                room_counts[match_id]["blue"] += 1
+
+        # 6. Gabungkan informasi room
+        room_data = []
+
+        for match in matches:
+            counts = room_counts[match["id"]]
+
+            red_count = counts["red"]
+            blue_count = counts["blue"]
+
+            red_capacity = match.get("red_capacity", 0)
+            blue_capacity = match.get("blue_capacity", 0)
+
+            room_data.append({
+                "id": match["id"],
+                "match_name": match["match_name"],
+                "room_code": match.get("room_code"),
+                "status": match["status"],
+                "arena_name": match.get("arena_name"),
+                "duration_hours": match.get("duration_hours"),
+
+                "red_team": {
+                    "total": red_count,
+                    "capacity": red_capacity,
+                    "available": max(
+                        0, red_capacity - red_count
+                    )
+                },
+
+                "blue_team": {
+                    "total": blue_count,
+                    "capacity": blue_capacity,
+                    "available": max(
+                        0, blue_capacity - blue_count
+                    )
+                },
+
+                "total_players": red_count + blue_count,
+                "max_players": match["max_players"],
+
+                "created_at": match["created_at"]
+            })
+
+        return {
+            "success": True,
+            "total_rooms": total_rooms,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (
+                (total_rooms + page_size - 1) // page_size
+            ),
+            "data": room_data
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print("ROOM BROWSER ERROR:", repr(error))
+
+        raise HTTPException(
+            status_code=500,
+            detail="Gagal mengambil daftar room"
+        )
+
+# ==========================================
+# CREATE ROOM API
+# ==========================================
+
+class CreateRoomRequest(BaseModel):
+    match_name: str = Field(min_length=3, max_length=100)
+    host_player_id: str
+    team_code: str = Field(pattern="^(RED|BLUE)$")
+    red_capacity: int = Field(ge=1, le=50)
+    blue_capacity: int = Field(ge=1, le=50)
+    duration_hours: float = Field(gt=0, le=24)
+    arena_name: str = Field(min_length=2, max_length=100)
+
+
+@app.post("/api/rooms/create")
+def create_room(data: CreateRoomRequest):
+    created_match_id = None
+
+    try:
+        # 1. Periksa Host
+        player_response = (
+            supabase.table("players")
+            .select("id, username, full_name, email")
+            .eq("id", data.host_player_id)
+            .limit(1)
+            .execute()
+        )
+
+        if not player_response.data:
+            raise HTTPException(
+                status_code=404,
+                detail="Data Host tidak ditemukan"
+            )
+
+        host = player_response.data[0]
+
+        # 2. Periksa tim Host
+        team_response = (
+            supabase.table("teams")
+            .select("id, team_code, team_name, team_color")
+            .eq("team_code", data.team_code)
+            .limit(1)
+            .execute()
+        )
+
+        if not team_response.data:
+            raise HTTPException(
+                status_code=404,
+                detail="Tim tidak ditemukan"
+            )
+
+        team = team_response.data[0]
+
+        # 3. Buat kode room unik
+        room_code = None
+
+        for _ in range(10):
+            candidate = secrets.token_hex(4).upper()
+
+            check_code = (
+                supabase.table("matches")
+                .select("id")
+                .eq("room_code", candidate)
+                .limit(1)
+                .execute()
+            )
+
+            if not check_code.data:
+                room_code = candidate
+                break
+
+        if not room_code:
+            raise HTTPException(
+                status_code=500,
+                detail="Gagal membuat kode room unik"
+            )
+
+        # 4. Hitung kapasitas total
+        max_players = data.red_capacity + data.blue_capacity
+
+        # 5. Buat pertandingan
+        match_response = (
+            supabase.table("matches")
+            .insert({
+                "match_name": data.match_name,
+                "room_code": room_code,
+                "status": "waiting",
+                "red_capacity": data.red_capacity,
+                "blue_capacity": data.blue_capacity,
+                "max_players": max_players,
+                "duration_hours": data.duration_hours,
+                "arena_name": data.arena_name
+            })
+            .execute()
+        )
+
+        if not match_response.data:
+            raise Exception("Gagal membuat room")
+
+        match = match_response.data[0]
+        created_match_id = match["id"]
+
+        # 6. Masukkan Host sebagai pemain
+        host_response = (
+            supabase.table("match_players")
+            .insert({
+                "match_id": match["id"],
+                "player_id": host["id"],
+                "team_id": team["id"],
+                "player_status": "joined",
+                "is_host": True
+            })
+            .execute()
+        )
+
+        if not host_response.data:
+            raise Exception("Gagal mendaftarkan Host ke room")
+
+        # 7. Berikan respons
+        return {
+            "success": True,
+            "message": "Room berhasil dibuat",
+            "room": {
+                "id": match["id"],
+                "match_name": match["match_name"],
+                "room_code": match["room_code"],
+                "status": match["status"],
+                "arena_name": match["arena_name"],
+                "duration_hours": match["duration_hours"],
+                "max_players": match["max_players"],
+                "red_capacity": match["red_capacity"],
+                "blue_capacity": match["blue_capacity"]
+            },
+            "host": {
+                "player": host,
+                "team": team,
+                "is_host": True
+            }
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        # Hapus room jika pendaftaran Host gagal
+        if created_match_id:
+            try:
+                (
+                    supabase.table("matches")
+                    .delete()
+                    .eq("id", created_match_id)
+                    .execute()
+                )
+            except Exception as cleanup_error:
+                print("ROOM CLEANUP ERROR:", repr(cleanup_error))
+
+        print("CREATE ROOM ERROR:", repr(error))
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(error)
+        )
+
+    
+# ==========================================
+# JOIN ROOM BY CODE API
+# ==========================================
+
+class JoinRoomByCodeRequest(BaseModel):
+    room_code: str = Field(min_length=8, max_length=8)
+    player_id: str
+    team_code: str = Field(pattern="^(RED|BLUE)$")
+
+
+@app.post("/api/rooms/join")
+def join_room_by_code(data: JoinRoomByCodeRequest):
+    try:
+        # 1. Cari room berdasarkan kode
+        room_response = (
+            supabase.table("matches")
+            .select("*")
+            .eq("room_code", data.room_code.strip().upper())
+            .limit(1)
+            .execute()
+        )
+
+        if not room_response.data:
+            raise HTTPException(
+                status_code=404,
+                detail="Kode room tidak ditemukan"
+            )
+
+        room = room_response.data[0]
+
+        # 2. Pastikan room masih menerima pemain
+        if room["status"] != "waiting":
+            raise HTTPException(
+                status_code=400,
+                detail="Room sudah tidak menerima pemain"
+            )
+
+        # 3. Gunakan fungsi join yang sudah dibuat
+        selection = TeamSelection(
+            player_id=data.player_id,
+            team_code=data.team_code
+        )
+
+        result = select_team(room["id"], selection)
+
+        return {
+            "success": True,
+            "message": "Berhasil bergabung menggunakan kode room",
+            "room_code": room["room_code"],
+            "room_name": room["match_name"],
+            "join_result": result
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print("JOIN BY CODE ERROR:", repr(error))
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(error)
+        )
+
+
+# ==========================================
+# MATCH TIMER API
+# ==========================================
+
+@app.get("/api/matches/{match_id}/timer")
+def get_match_timer(match_id: str):
+    """Mengambil sisa waktu pertandingan dan mengakhiri match saat waktunya habis."""
+    try:
+        response = (
+            supabase.table("matches")
+            .select("id, status, started_at, ended_at, duration_hours")
+            .eq("id", match_id)
+            .limit(1)
+            .execute()
+        )
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Pertandingan tidak ditemukan")
+
+        match_data = response.data[0]
+        now = datetime.now(timezone.utc)
+        started_raw = match_data.get("started_at")
+        duration_hours = match_data.get("duration_hours")
+
+        if not started_raw or not duration_hours:
+            return {
+                "success": True,
+                "status": match_data["status"],
+                "started_at": started_raw,
+                "ends_at": None,
+                "remaining_seconds": None
+            }
+
+        started_at = datetime.fromisoformat(started_raw.replace("Z", "+00:00"))
+        ends_at = started_at + timedelta(hours=float(duration_hours))
+        remaining_seconds = max(0, int((ends_at - now).total_seconds()))
+
+        if match_data["status"] == "active" and remaining_seconds <= 0:
+            ended = (
+                supabase.table("matches")
+                .update({
+                    "status": "completed",
+                    "ended_at": now.isoformat()
+                })
+                .eq("id", match_id)
+                .eq("status", "active")
+                .execute()
+            )
+            if ended.data:
+                match_data["status"] = "completed"
+                match_data["ended_at"] = ended.data[0].get("ended_at")
+            else:
+                latest = (
+                    supabase.table("matches")
+                    .select("status, ended_at")
+                    .eq("id", match_id)
+                    .limit(1)
+                    .execute()
+                )
+                if latest.data:
+                    match_data["status"] = latest.data[0]["status"]
+                    match_data["ended_at"] = latest.data[0].get("ended_at")
+
+        return {
+            "success": True,
+            "status": match_data["status"],
+            "started_at": started_at.isoformat(),
+            "ends_at": ends_at.isoformat(),
+            "remaining_seconds": remaining_seconds,
+            "ended_at": match_data.get("ended_at")
+        }
+
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
