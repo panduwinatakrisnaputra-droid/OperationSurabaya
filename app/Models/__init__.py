@@ -1,4 +1,9 @@
-from app.Models.player import PlayerRegister, PlayerLogin, PlayerLogout
+from app.Models.player import (
+    PlayerRegister,
+    PlayerLogin,
+    PlayerFaceLogin,
+    PlayerLogout,
+)
 from app.Models.match import (
     TeamSelection,
     LeaveTeamRequest,
@@ -10,6 +15,7 @@ from app.Models.match import (
 __all__ = [
     "PlayerRegister",
     "PlayerLogin",
+    "PlayerFaceLogin",
     "PlayerLogout",
     "TeamSelection",
     "LeaveTeamRequest",

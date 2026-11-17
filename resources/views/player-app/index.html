@@ -62,50 +62,42 @@
       </div>
 
       <div class="login-grid">
-        <div class="scan-box">
+        <div class="scan-box face-scan-box" id="faceScanBox">
           <div class="scan-corners"></div>
-          <div class="face-icon">◉</div>
-          <div class="scan-line"></div>
-          <span>PLAYER IDENTITY MODULE</span>
-          <small>
-            Secure account authentication module.
-            Face Recognition dapat diintegrasikan kemudian.
-          </small>
+          <video id="authWebcam" autoplay playsinline muted></video>
+          <canvas id="snapshotCanvas" style="display:none;"></canvas>
+          <canvas id="authOverlay"></canvas>
+          <div class="scan-line" id="faceScanLine"></div>
+
+          <!-- Prompt Izin Kamera jika browser memblokir autoplay -->
+          <div class="camera-perm-prompt" id="cameraPermPrompt">
+            <div class="camera-perm-icon">📷</div>
+            <p>Izin kamera diperlukan untuk Face Recognition.</p>
+            <button type="button" class="btn primary" id="requestCameraBtn">
+              IZINKAN & AKTIFKAN KAMERA
+            </button>
+          </div>
+
+          <div class="face-feedback-wrap">
+            <span class="face-status-badge" id="faceBadge">MENUNGGU IZIN KAMERA</span>
+            <span class="face-instruction" id="faceInstruction">Klik tombol di atas untuk mengaktifkan kamera</span>
+          </div>
         </div>
 
         <div class="form-area">
 
-          <!-- LOGIN FORM -->
+          <!-- LOGIN FORM (FACE RECOGNITION) -->
           <div id="loginFields">
-            <label for="loginEmail">EMAIL</label>
-            <input
-              id="loginEmail"
-              type="email"
-              placeholder="nama@email.com"
-              autocomplete="email"
-            >
-
-            <label for="loginPassword">PASSWORD</label>
-            <div class="password-wrap">
-              <input
-                id="loginPassword"
-                type="password"
-                placeholder="Masukkan password"
-                autocomplete="current-password"
-              >
-              <button
-                type="button"
-                class="password-toggle"
-                id="toggleLoginPassword"
-              >SHOW</button>
+            <div class="face-login-intro">
+              <p>Sistem memindai wajah Anda secara real-time. Tidak perlu mengetik email atau password.</p>
             </div>
 
-            <button class="btn primary" id="loginBtn">
-              LOGIN & CONTINUE <b>↗</b>
+            <button class="btn primary" id="faceLoginBtn">
+              SCAN WAJAH & MASUK <b>↗</b>
             </button>
 
             <p class="hint" id="loginHint">
-              Masukkan email dan password akunmu.
+              Arahkan wajah lurus ke kamera sampai kotak wajah berwarna hijau.
             </p>
           </div>
 
@@ -125,35 +117,27 @@
               autocomplete="name"
             >
 
-            <label for="playerEmail">EMAIL</label>
+            <label for="playerEmail">EMAIL (OPSIONAL)</label>
             <input
               id="playerEmail"
               type="email"
-              placeholder="nama@email.com"
+              placeholder="nama@email.com (opsional)"
               autocomplete="email"
             >
 
-            <label for="registerPassword">PASSWORD</label>
-            <div class="password-wrap">
-              <input
-                id="registerPassword"
-                type="password"
-                placeholder="Minimal 8 karakter"
-                autocomplete="new-password"
-              >
-              <button
-                type="button"
-                class="password-toggle"
-                id="toggleRegisterPassword"
-              >SHOW</button>
+            <div class="biometric-box">
+              <label>STATUS PEMINDAIAN WAJAH</label>
+              <div class="biometric-indicator" id="bioIndicator">
+                <span id="faceSampleStatus">Menunggu deteksi wajah di kamera...</span>
+              </div>
             </div>
 
             <button class="btn primary" id="registerBtn">
-              CREATE ACCOUNT <b>↗</b>
+              DAFTARKAN WAJAH & AKUN <b>↗</b>
             </button>
 
             <p class="hint" id="registerHint">
-              Buat akun pemain untuk bergabung dalam operasi.
+              Pastikan wajah Anda terlihat jelas di kamera sebelum menekan daftar.
             </p>
           </div>
 
@@ -365,6 +349,7 @@
     </footer>
   </main>
 
+  <script src="vendor/face-api.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
