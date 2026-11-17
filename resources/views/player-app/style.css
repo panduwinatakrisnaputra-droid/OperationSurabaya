@@ -541,7 +541,6 @@
 .health-fill.low {
     background: var(--red);
 }
-<<<<<<< HEAD:resources/views/player-app/style.css
 
 /* ==========================================
    FACE RECOGNITION AUTHENTICATION STYLES
@@ -684,7 +683,7 @@
   font-weight: 700;
   letter-spacing: 0.05em;
 }
-=======
+
 /* ROOM BROWSER */
 .room-actions-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:24px 0}.room-action-card{background:#0c131c;border:1px solid var(--line);padding:22px;min-width:0}.room-action-card h3,.room-list-head h3{font:700 25px 'Barlow Condensed';margin:0 0 18px}.room-action-card label{display:block;font:10px 'DM Mono';letter-spacing:1px;color:var(--muted);margin:13px 0 7px}.room-action-card input,.room-action-card select,.room-card select{width:100%;background:#080e15;border:1px solid #304052;color:var(--text);padding:12px;font:12px 'DM Mono';outline:none}.room-form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.room-action-card .btn{width:100%;margin-top:16px}.room-list-head{display:flex;justify-content:space-between;align-items:center;margin:34px 0 14px}.room-list{display:grid;grid-template-columns:1fr 1fr;gap:12px}.room-card{background:#0c131c;border:1px solid var(--line);padding:18px;min-width:0}.room-card-title{display:flex;justify-content:space-between;gap:12px;align-items:start}.room-card h4{font:700 20px 'Barlow Condensed';margin:0}.room-code{font:11px 'DM Mono';color:var(--lime);letter-spacing:1px}.room-card>p{font:11px 'DM Mono';color:var(--muted);margin:10px 0}.room-team-capacity{display:flex;gap:18px;font:11px 'DM Mono';margin:15px 0}.red-text{color:var(--red)}.blue-text{color:var(--blue)}.room-card-controls{display:flex;gap:10px}.room-card-controls select{flex:1}.room-card-controls .btn{padding:10px 18px}.room-list-head .btn{margin:0}
 @media(max-width:700px){.room-actions-grid,.room-list{grid-template-columns:1fr}.room-form-row{grid-template-columns:1fr 1fr}.room-list-head{align-items:end}}
@@ -883,4 +882,3 @@
 .base-defense-notification p{margin:4px 0 0;color:#f4dfe0;font:11px/1.5 'DM Mono',monospace}
 .base-defense-notification button{margin-left:auto;align-self:flex-start;border:0;background:transparent;color:#fff;font-size:22px;cursor:pointer}
 @media(max-width:700px){.base-defense-notification{top:10px;padding:11px 12px;gap:9px}.base-defense-notification p{font-size:9px}.base-defense-notification strong{font-size:10px}}
->>>>>>> main:operation_surabaya_work/player-app/style.css
