@@ -10,7 +10,7 @@ def start_match(match_id: str):
 
 @router.post("/matches/{match_id}/end")
 def end_match(match_id: str):
-    return match_controller.end_match(match_id)
+    return match_controller.admin_end_match(match_id)
 
 @router.delete("/matches/all")
 def delete_all_matches():

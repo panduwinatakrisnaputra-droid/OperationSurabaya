@@ -13,6 +13,14 @@ from app.Http.Controllers import match_controller, gameplay_controller
 
 router = APIRouter(prefix="/api/matches", tags=["Matches & Gameplay"])
 
+@router.get("/history")
+def get_match_history():
+    return match_controller.get_match_history()
+
+@router.get("/history")
+def get_match_history():
+    return match_controller.get_match_history()
+
 # Match lifecycle & lobby
 @router.get("/waiting")
 def get_waiting_match():

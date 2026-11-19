@@ -251,11 +251,15 @@ body {
 
 .overview {
     display: grid;
-    grid-template-columns:
-        minmax(190px, .8fr)
-        minmax(300px, 1.6fr)
-        minmax(190px, .8fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
+}
+
+.team-panels-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(245px, 1fr));
+    gap: 12px;
+    min-width: 0;
 }
 
 .team-panel,
@@ -616,13 +620,12 @@ footer {
 ========================================== */
 
 @media (max-width: 1050px) {
-    .overview {
-        grid-template-columns: 1fr 1fr;
+    .team-panels-grid {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     }
 
     .map-panel {
         grid-column: 1 / -1;
-        grid-row: 1;
     }
 
     .lower-grid {
@@ -690,7 +693,7 @@ footer {
         display: none;
     }
 
-    .overview {
+    .team-panels-grid {
         grid-template-columns: 1fr;
     }
 
@@ -835,3 +838,11 @@ footer {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
+
+/* Dynamic team dashboard */
+.team-panel { border-top: 3px solid var(--team-color, var(--line)); }
+.team-title > span { color: var(--team-color, var(--text)); }
+.dynamic-mobility-track { display:flex; overflow:hidden; gap:2px; height:9px; margin-top:10px; }
+.dynamic-mobility-segment { height:100%; min-width:2px; transition:width .25s ease; }
+.mobility-team-stat { display:flex; justify-content:space-between; gap:12px; margin-top:7px; font:10px 'DM Mono',monospace; }
+.mobility-team-stat strong { color:var(--text); white-space:nowrap; }

@@ -1,331 +1,104 @@
 import secrets
-from typing import Optional
 from fastapi import HTTPException
 from config.database import supabase
 from app.Models.match import CreateRoomRequest, JoinRoomByCodeRequest, TeamSelection
 from app.Http.Controllers.match_controller import select_team
 
-def get_rooms(
-    status: str = "all",
-    search: str = "",
-    page: int = 1,
-    page_size: int = 20
-):
+TEAM_CATALOG = [
+    {"team_code":"RED", "team_name":"RED", "team_color":"#EF4444"},
+    {"team_code":"BLUE", "team_name":"BLUE", "team_color":"#3B82F6"},
+    {"team_code":"GREEN", "team_name":"GREEN", "team_color":"#22C55E"},
+    {"team_code":"YELLOW", "team_name":"YELLOW", "team_color":"#EAB308"},
+    {"team_code":"PURPLE", "team_name":"PURPLE", "team_color":"#A855F7"},
+    {"team_code":"ORANGE", "team_name":"ORANGE", "team_color":"#F97316"},
+]
+
+def _teams_for_match(match_id):
+    config = supabase.table("match_teams").select("team_id,capacity,team_order,teams(id,team_code,team_name,team_color)").eq("match_id", match_id).order("team_order").execute().data or []
+    counts = supabase.table("match_players").select("team_id").eq("match_id", match_id).execute().data or []
+    count_map = {}
+    for row in counts:
+        count_map[row["team_id"]] = count_map.get(row["team_id"], 0) + 1
+    result = []
+    for row in config:
+        team = row.get("teams") or {}
+        total = count_map.get(row["team_id"], 0)
+        result.append({**team, "capacity": row["capacity"], "total": total, "available": max(0, row["capacity"]-total)})
+    return result
+
+def get_rooms(status="all", search="", page=1, page_size=20):
     try:
-        allowed_status = [
-            "all", "waiting", "active",
-            "completed", "cancelled"
-        ]
-
-        if status not in allowed_status:
-            raise HTTPException(
-                status_code=400,
-                detail="Status room tidak valid"
-            )
-
+        if status not in ["all", "waiting", "active", "completed", "cancelled"]:
+            raise HTTPException(400, "Status room tidak valid")
         if page < 1 or page_size < 1 or page_size > 100:
-            raise HTTPException(
-                status_code=400,
-                detail="Parameter halaman tidak valid"
-            )
-
-        query = (
-            supabase.table("matches")
-            .select("*", count="exact")
-            .order("created_at", desc=True)
-        )
-
-        if status != "all":
-            query = query.eq("status", status)
-
+            raise HTTPException(400, "Parameter halaman tidak valid")
+        query = supabase.table("matches").select("*", count="exact").order("created_at", desc=True)
+        if status != "all": query = query.eq("status", status)
         if search.strip():
             keyword = search.strip().replace(",", "")
-            query = query.or_(
-                f"match_name.ilike.%{keyword}%,"
-                f"room_code.ilike.%{keyword}%"
-            )
-
-        start = (page - 1) * page_size
-        end = start + page_size - 1
-
-        response = query.range(start, end).execute()
-
+            query = query.or_(f"match_name.ilike.%{keyword}%,room_code.ilike.%{keyword}%")
+        response = query.range((page-1)*page_size, page*page_size-1).execute()
         matches = response.data or []
-        total_rooms = response.count or 0
-
-        if not matches:
-            return {
-                "success": True,
-                "total_rooms": total_rooms,
-                "page": page,
-                "page_size": page_size,
-                "data": []
-            }
-
-        match_ids = [m["id"] for m in matches]
-
-        members_response = (
-            supabase.table("match_players")
-            .select("match_id, team_id")
-            .in_("match_id", match_ids)
-            .execute()
-        )
-
-        members = members_response.data or []
-
-        teams_response = (
-            supabase.table("teams")
-            .select("id, team_code")
-            .execute()
-        )
-
-        teams = teams_response.data or []
-        team_map = {
-            team["id"]: team["team_code"]
-            for team in teams
-        }
-
-        room_counts = {
-            match["id"]: {"red": 0, "blue": 0}
-            for match in matches
-        }
-
-        for member in members:
-            match_id = member["match_id"]
-            team_code = team_map.get(member["team_id"])
-
-            if match_id not in room_counts:
-                continue
-
-            if team_code == "RED":
-                room_counts[match_id]["red"] += 1
-            elif team_code == "BLUE":
-                room_counts[match_id]["blue"] += 1
-
-        room_data = []
+        data = []
         for match in matches:
-            counts = room_counts[match["id"]]
-            red_count = counts["red"]
-            blue_count = counts["blue"]
-            red_capacity = match.get("red_capacity", 0)
-            blue_capacity = match.get("blue_capacity", 0)
-
-            room_data.append({
-                "id": match["id"],
-                "match_name": match["match_name"],
-                "room_code": match.get("room_code"),
-                "status": match["status"],
-                "arena_name": match.get("arena_name"),
-                "duration_hours": match.get("duration_hours"),
-                "red_team": {
-                    "total": red_count,
-                    "capacity": red_capacity,
-                    "available": max(0, red_capacity - red_count)
-                },
-                "blue_team": {
-                    "total": blue_count,
-                    "capacity": blue_capacity,
-                    "available": max(0, blue_capacity - blue_count)
-                },
-                "total_players": red_count + blue_count,
-                "max_players": match["max_players"],
-                "created_at": match["created_at"]
-            })
-
-        return {
-            "success": True,
-            "total_rooms": total_rooms,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total_rooms + page_size - 1) // page_size,
-            "data": room_data
-        }
-
-    except HTTPException:
-        raise
+            teams = _teams_for_match(match["id"])
+            data.append({"id":match["id"], "match_name":match["match_name"], "room_code":match.get("room_code"), "status":match["status"], "arena_name":match.get("arena_name"), "teams":teams, "total_players":sum(t["total"] for t in teams), "max_players":sum(t["capacity"] for t in teams), "created_at":match.get("created_at")})
+        total = response.count or 0
+        return {"success":True, "total_rooms":total, "page":page, "page_size":page_size, "total_pages":(total+page_size-1)//page_size, "data":data}
+    except HTTPException: raise
     except Exception as error:
         print("ROOM BROWSER ERROR:", repr(error))
-        raise HTTPException(
-            status_code=500,
-            detail="Gagal mengambil daftar room"
-        )
-
+        raise HTTPException(500, "Gagal mengambil daftar room")
 
 def create_room(data: CreateRoomRequest):
     created_match_id = None
     try:
-        player_response = (
-            supabase.table("players")
-            .select("id, player_number, username, full_name, email")
-            .eq("id", data.host_player_id)
-            .limit(1)
-            .execute()
-        )
-
-        if not player_response.data:
-            raise HTTPException(
-                status_code=404,
-                detail="Data Host tidak ditemukan"
-            )
-
-        host = player_response.data[0]
-
-        team_response = (
-            supabase.table("teams")
-            .select("id, team_code, team_name, team_color")
-            .eq("team_code", data.team_code)
-            .limit(1)
-            .execute()
-        )
-
-        if not team_response.data:
-            raise HTTPException(
-                status_code=404,
-                detail="Tim tidak ditemukan"
-            )
-
-        team = team_response.data[0]
-
+        codes = [item.team_code for item in data.teams]
+        if len(codes) < 2 or len(codes) != len(set(codes)):
+            raise HTTPException(400, "Minimal dua tim dan setiap tim harus unik")
+        if codes != [item["team_code"] for item in TEAM_CATALOG[:len(codes)]]:
+            raise HTTPException(400, "Urutan tim harus mengikuti urutan warna sistem")
+        if data.team_code not in codes:
+            raise HTTPException(400, "Tim Host harus termasuk dalam konfigurasi room")
+        host_res = supabase.table("players").select("id,player_number,username,full_name,email").eq("id", data.host_player_id).limit(1).execute()
+        if not host_res.data: raise HTTPException(404, "Data Host tidak ditemukan")
+        host = host_res.data[0]
+        team_res = supabase.table("teams").select("id,team_code,team_name,team_color").in_("team_code", codes).execute()
+        team_map = {t["team_code"]:t for t in (team_res.data or [])}
+        if any(code not in team_map for code in codes): raise HTTPException(500, "Master data warna tim belum lengkap. Jalankan migration Dynamic Team System.")
         room_code = None
         for _ in range(10):
             candidate = secrets.token_hex(4).upper()
-            check_code = (
-                supabase.table("matches")
-                .select("id")
-                .eq("room_code", candidate)
-                .limit(1)
-                .execute()
-            )
-
-            if not check_code.data:
-                room_code = candidate
-                break
-
-        if not room_code:
-            raise HTTPException(
-                status_code=500,
-                detail="Gagal membuat kode room unik"
-            )
-
-        max_players = data.red_capacity + data.blue_capacity
-
-        match_response = (
-            supabase.table("matches")
-            .insert({
-                "match_name": data.match_name,
-                "room_code": room_code,
-                "status": "waiting",
-                "red_capacity": data.red_capacity,
-                "blue_capacity": data.blue_capacity,
-                "max_players": max_players,
-                "duration_hours": data.duration_hours,
-                "arena_name": data.arena_name
-            })
-            .execute()
-        )
-
-        if not match_response.data:
-            raise Exception("Gagal membuat room")
-
-        match = match_response.data[0]
-        created_match_id = match["id"]
-
-        host_response = (
-            supabase.table("match_players")
-            .insert({
-                "match_id": match["id"],
-                "player_id": host["id"],
-                "team_id": team["id"],
-                "player_status": "joined",
-                "is_host": True
-            })
-            .execute()
-        )
-
-        if not host_response.data:
-            raise Exception("Gagal mendaftarkan Host ke room")
-
-        return {
-            "success": True,
-            "message": "Room berhasil dibuat",
-            "room": {
-                "id": match["id"],
-                "match_name": match["match_name"],
-                "room_code": match["room_code"],
-                "status": match["status"],
-                "arena_name": match["arena_name"],
-                "duration_hours": match["duration_hours"],
-                "max_players": match["max_players"],
-                "red_capacity": match["red_capacity"],
-                "blue_capacity": match["blue_capacity"]
-            },
-            "host": {
-                "player": host,
-                "team": team,
-                "is_host": True
-            }
-        }
-
-    except HTTPException:
-        raise
+            if not supabase.table("matches").select("id").eq("room_code", candidate).limit(1).execute().data:
+                room_code = candidate; break
+        if not room_code: raise HTTPException(500, "Gagal membuat kode room unik")
+        capacities = {item.team_code:item.capacity for item in data.teams}
+        max_players = sum(capacities.values())
+        match_res = supabase.table("matches").insert({"match_name":data.match_name,"room_code":room_code,"status":"waiting","red_capacity":capacities["RED"],"blue_capacity":capacities["BLUE"],"max_players":max_players,"duration_hours":24,"arena_name":data.arena_name}).execute()
+        if not match_res.data: raise Exception("Gagal membuat room")
+        match = match_res.data[0]; created_match_id = match["id"]
+        rows = [{"match_id":created_match_id,"team_id":team_map[item.team_code]["id"],"capacity":item.capacity,"team_order":index+1} for index,item in enumerate(data.teams)]
+        supabase.table("match_teams").insert(rows).execute()
+        host_team = team_map[data.team_code]
+        supabase.table("match_players").insert({"match_id":created_match_id,"player_id":host["id"],"team_id":host_team["id"],"player_status":"joined","is_host":True}).execute()
+        teams = [{**team_map[item.team_code],"capacity":item.capacity,"total":1 if item.team_code == data.team_code else 0,"available":item.capacity-(1 if item.team_code == data.team_code else 0)} for item in data.teams]
+        return {"success":True,"message":"Room berhasil dibuat","room":{"id":match["id"],"match_name":match["match_name"],"room_code":match["room_code"],"status":match["status"],"arena_name":match["arena_name"],"max_players":max_players,"teams":teams},"host":{"player":host,"team":host_team,"is_host":True}}
+    except HTTPException: raise
     except Exception as error:
         if created_match_id:
-            try:
-                supabase.table("matches").delete().eq("id", created_match_id).execute()
-            except Exception as cleanup_error:
-                print("ROOM CLEANUP ERROR:", repr(cleanup_error))
-
+            try: supabase.table("matches").delete().eq("id", created_match_id).execute()
+            except Exception as cleanup_error: print("ROOM CLEANUP ERROR:", repr(cleanup_error))
         print("CREATE ROOM ERROR:", repr(error))
-        raise HTTPException(
-            status_code=500,
-            detail=str(error)
-        )
-
+        raise HTTPException(500, detail=str(error))
 
 def join_room_by_code(data: JoinRoomByCodeRequest):
     try:
-        room_response = (
-            supabase.table("matches")
-            .select("*")
-            .eq("room_code", data.room_code.strip().upper())
-            .limit(1)
-            .execute()
-        )
-
-        if not room_response.data:
-            raise HTTPException(
-                status_code=404,
-                detail="Kode room tidak ditemukan"
-            )
-
-        room = room_response.data[0]
-
-        if room["status"] != "waiting":
-            raise HTTPException(
-                status_code=400,
-                detail="Room sudah tidak menerima pemain"
-            )
-
-        selection = TeamSelection(
-            player_id=data.player_id,
-            team_code=data.team_code
-        )
-
-        result = select_team(room["id"], selection)
-
-        return {
-            "success": True,
-            "message": "Berhasil bergabung menggunakan kode room",
-            "room_code": room["room_code"],
-            "room_name": room["match_name"],
-            "join_result": result
-        }
-
-    except HTTPException:
-        raise
+        room_res = supabase.table("matches").select("*").eq("room_code", data.room_code.strip().upper()).limit(1).execute()
+        if not room_res.data: raise HTTPException(404, "Kode room tidak ditemukan")
+        room = room_res.data[0]
+        if room["status"] != "waiting": raise HTTPException(400, "Room sudah tidak menerima pemain")
+        result = select_team(room["id"], TeamSelection(player_id=data.player_id, team_code=data.team_code))
+        return {"success":True,"message":"Berhasil bergabung ke room","room_code":room["room_code"],"room_name":room["match_name"],"join_result":result}
+    except HTTPException: raise
     except Exception as error:
-        print("JOIN BY CODE ERROR:", repr(error))
-        raise HTTPException(
-            status_code=500,
-            detail=str(error)
-        )
+        print("JOIN BY CODE ERROR:", repr(error)); raise HTTPException(500, detail=str(error))

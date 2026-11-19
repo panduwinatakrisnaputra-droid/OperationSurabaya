@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+supabase
+
+# Face Recognition (harus ada di venv yang sama)
+opencv-contrib-python
+face-recognition
+numpy

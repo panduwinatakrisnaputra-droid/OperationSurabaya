@@ -241,8 +241,8 @@ function openGameplay() {
     const teamName = window.currentPlayerTeam || 'TEAM';
 
     $('gameplayTeamBadge').textContent = teamName;
-    $('gameplayTeamBadge').className =
-        `team-badge ${teamName.toLowerCase()}`;
+    $('gameplayTeamBadge').className = `team-badge ${teamName.toLowerCase()}`;
+    $('gameplayTeamBadge').style.color = teamColor(teamName);
 
     startGameplayCamera();
     startGameplayHealthPolling();
@@ -342,117 +342,95 @@ async function loadRooms(search = '') {
     }
 }
 
+const TEAM_CATALOG = [
+    { code:'RED', color:'#EF4444' }, { code:'BLUE', color:'#3B82F6' },
+    { code:'GREEN', color:'#22C55E' }, { code:'YELLOW', color:'#EAB308' },
+    { code:'PURPLE', color:'#A855F7' }, { code:'ORANGE', color:'#F97316' }
+];
+let createTeamCount = 2;
+function teamColor(code) { return TEAM_CATALOG.find(t => t.code === code)?.color || '#64748B'; }
+function renderCreateTeamEditor() {
+    const root = $('createTeamEditor'); if (!root) return;
+    root.innerHTML = '';
+    TEAM_CATALOG.slice(0, createTeamCount).forEach((team, index) => {
+        const row = document.createElement('div'); row.className = 'dynamic-team-row';
+        const swatch = document.createElement('span'); swatch.className = 'dynamic-team-swatch'; swatch.style.background = team.color;
+        const name = document.createElement('strong'); name.textContent = `${team.code} TEAM`;
+        const capacityWrap = document.createElement('div');
+        const label = document.createElement('label'); label.textContent = 'KAPASITAS';
+        const input = document.createElement('input'); input.type = 'number'; input.min = '1'; input.max = '50'; input.value = '5'; input.dataset.teamCode = team.code; input.className = 'team-capacity-input';
+        capacityWrap.append(label,input); row.append(swatch,name,capacityWrap);
+        if (index === createTeamCount - 1 && index >= 2) { const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn outline'; remove.textContent = '×'; remove.title = 'Hapus tim'; remove.addEventListener('click', () => { createTeamCount--; renderCreateTeamEditor(); }); row.append(remove); }
+        root.appendChild(row);
+    });
+    const add = $('addTeamBtn'); if (add) add.disabled = createTeamCount >= TEAM_CATALOG.length;
+    const host = $('hostTeam'); const previous = host.value; host.innerHTML = '';
+    TEAM_CATALOG.slice(0, createTeamCount).forEach(t => { const o=document.createElement('option');o.value=t.code;o.textContent=`${t.code} TEAM`;host.append(o); });
+    host.value = TEAM_CATALOG.slice(0,createTeamCount).some(t=>t.code===previous) ? previous : 'RED';
+}
+$('addTeamBtn')?.addEventListener('click', () => { if (createTeamCount < TEAM_CATALOG.length) { createTeamCount++; renderCreateTeamEditor(); } });
+renderCreateTeamEditor();
+
 function renderRooms(rooms) {
-    const container = $('roomList');
-    container.innerHTML = '';
-    if (!rooms.length) {
-        container.innerHTML = '<p class="hint">Belum ada room yang tersedia. Kamu bisa membuat room baru atau bergabung menggunakan kode.</p>';
-        return;
-    }
+    const container = $('roomList'); container.innerHTML = '';
+    if (!rooms.length) { container.innerHTML = '<p class="hint">Belum ada room yang tersedia. Kamu bisa membuat room baru atau bergabung menggunakan kode.</p>'; return; }
     rooms.forEach(room => {
-        const card = document.createElement('article');
-        card.className = 'room-card';
-        const title = document.createElement('div');
-        title.className = 'room-card-title';
-        const name = document.createElement('h4');
-        name.textContent = room.match_name || 'Untitled Room';
-        const code = document.createElement('span');
-        code.className = 'room-code';
-        code.textContent = room.room_code || 'NO CODE';
-        title.append(name, code);
-        const meta = document.createElement('p');
-        meta.textContent = `${room.arena_name || 'Arena'} · ${room.duration_hours ?? '-'} jam · ${String(room.status || '').toUpperCase()}`;
-        const teams = document.createElement('div');
-        teams.className = 'room-team-capacity';
-        const red = document.createElement('span');
-        red.className = 'red-text';
-        red.textContent = `RED ${room.red_team?.total ?? 0}/${room.red_team?.capacity ?? 0}`;
-        const blue = document.createElement('span');
-        blue.className = 'blue-text';
-        blue.textContent = `BLUE ${room.blue_team?.total ?? 0}/${room.blue_team?.capacity ?? 0}`;
-        teams.append(red, blue);
-        const controls = document.createElement('div');
-        controls.className = 'room-card-controls';
-        const select = document.createElement('select');
-        select.innerHTML = '<option value="RED">JOIN RED</option><option value="BLUE">JOIN BLUE</option>';
-        const join = document.createElement('button');
-        join.type = 'button'; join.className = 'btn primary'; join.textContent = 'JOIN';
-        join.addEventListener('click', () => joinRoom(room.room_code, select.value));
-        controls.append(select, join);
-        card.append(title, meta, teams, controls);
-        container.appendChild(card);
+        const card=document.createElement('article');card.className='room-card';
+        const title=document.createElement('div');title.className='room-card-title';
+        const name=document.createElement('h4');name.textContent=room.match_name||'Untitled Room';
+        const code=document.createElement('span');code.className='room-code';code.textContent=room.room_code||'NO CODE';title.append(name,code);
+        const meta=document.createElement('p');meta.textContent=`${room.arena_name||'Arena'} · ${String(room.status||'').toUpperCase()}`;
+        const teams=document.createElement('div');teams.className='room-team-capacity';
+        (room.teams||[]).forEach(t=>{const item=document.createElement('span');item.style.setProperty('--team-color',t.team_color||teamColor(t.team_code));item.textContent=`${t.team_name} ${t.total}/${t.capacity}`;teams.append(item);});
+        const controls=document.createElement('div');controls.className='room-card-controls';const select=document.createElement('select');
+        (room.teams||[]).forEach(t=>{const option=document.createElement('option');option.value=t.team_code;option.textContent=`${t.team_name} · ${t.total}/${t.capacity}${t.available<=0?' · FULL':''}`;option.disabled=t.available<=0;select.append(option);});
+        const join=document.createElement('button');join.type='button';join.className='btn primary';join.textContent='JOIN';join.disabled=!(room.teams||[]).some(t=>t.available>0);
+        join.addEventListener('click',()=>joinRoom(room.room_code,select.value));controls.append(select,join);card.append(title,meta,teams,controls);container.append(card);
     });
 }
-
 function enterLobby(room, teamCode) {
-    match = {
-        ...room,
-        red_capacity: room.red_capacity ?? room.red_team?.capacity,
-        blue_capacity: room.blue_capacity ?? room.blue_team?.capacity
-    };
-    window.currentPlayerTeam = teamCode;
-    $('lobbyRoomCode').textContent = room.room_code || 'ROOM CODE UNAVAILABLE';
-    $('assignment').textContent = `${teamCode} TEAM`;
-    $('assignment').className = `assignment ${teamCode.toLowerCase()}`;
-    $('lobbyWelcome').textContent = `${player.player_number ? `#${player.player_number} · ` : ''}${player.full_name} (@${player.username})`;
-    $('roomPanel').classList.add('hidden');
-    $('teamPanel').classList.add('hidden');
-    $('lobbyPanel').classList.remove('hidden');
-    $('operationStatus').textContent = 'LOBBY';
-    refreshLobby();
-    if (pollHandle) clearInterval(pollHandle);
-    pollHandle = setInterval(refreshLobby, 3000);
+    match={...room}; window.currentPlayerTeam=teamCode;
+    $('lobbyRoomCode').textContent=room.room_code||'ROOM CODE UNAVAILABLE';
+    $('assignment').textContent=`${teamCode} TEAM`; $('assignment').className='assignment'; $('assignment').style.borderColor=teamColor(teamCode); $('assignment').style.color=teamColor(teamCode);
+    $('lobbyWelcome').textContent=`${player.player_number?`#${player.player_number} · `:''}${player.full_name} (@${player.username})`;
+    $('roomPanel').classList.add('hidden');$('teamPanel').classList.add('hidden');$('lobbyPanel').classList.remove('hidden');$('operationStatus').textContent='LOBBY';
+    refreshLobby(); if(pollHandle)clearInterval(pollHandle);pollHandle=setInterval(refreshLobby,3000);
 }
-
 async function joinRoom(roomCode, teamCode) {
-    if (!player) return;
-    const button = $('joinRoomBtn');
-    if (button) button.disabled = true;
-    showRoomHint('joinRoomHint', 'Menghubungkan ke room...');
-    try {
-        const result = await api('/api/rooms/join', {
-            method: 'POST',
-            body: JSON.stringify({ room_code: roomCode.trim().toUpperCase(), player_id: player.id, team_code: teamCode })
-        });
-        const refreshed = await api(`/api/rooms?status=waiting&search=${encodeURIComponent(roomCode.trim().toUpperCase())}&page=1&page_size=10`);
-        const room = (refreshed.data || []).find(item => item.room_code === roomCode.trim().toUpperCase());
-        if (!room) throw new Error('Berhasil join, tetapi data room tidak ditemukan. Refresh Room Browser.');
-        showRoomHint('joinRoomHint', result.message || 'Berhasil bergabung.');
-        enterLobby(room, teamCode);
-    } catch (error) {
-        showRoomHint('joinRoomHint', error.message, true);
-    } finally {
-        if (button) button.disabled = false;
-    }
+    if(!player)return;const button=$('joinRoomBtn');if(button)button.disabled=true;showRoomHint('joinRoomHint','Menghubungkan ke room...');
+    try{
+        const result=await api('/api/rooms/join',{method:'POST',body:JSON.stringify({room_code:roomCode.trim().toUpperCase(),player_id:player.id,team_code:teamCode})});
+        const refreshed=await api(`/api/rooms?status=waiting&search=${encodeURIComponent(roomCode.trim().toUpperCase())}&page=1&page_size=10`);
+        const room=(refreshed.data||[]).find(item=>item.room_code===roomCode.trim().toUpperCase());
+        if(!room)throw new Error('Berhasil join, tetapi data room tidak ditemukan. Refresh Room Browser.');
+        showRoomHint('joinRoomHint',result.message||'Berhasil bergabung.');enterLobby(room,teamCode);
+    }catch(error){showRoomHint('joinRoomHint',error.message,true);}finally{if(button)button.disabled=false;}
 }
-
-$('createRoomBtn').addEventListener('click', async () => {
-    if (!player) return;
-    const payload = {
-        match_name: $('createRoomName').value.trim(),
-        host_player_id: player.id,
-        team_code: $('hostTeam').value,
-        red_capacity: Number($('redCapacity').value),
-        blue_capacity: Number($('blueCapacity').value),
-        duration_hours: Number($('roomDuration').value),
-        arena_name: $('roomArena').value.trim()
-    };
-    if (!payload.match_name || !payload.arena_name) {
-        showRoomHint('createRoomHint', 'Nama room dan arena wajib diisi.', true); return;
-    }
-    if (!Number.isInteger(payload.red_capacity) || !Number.isInteger(payload.blue_capacity) || payload.red_capacity < 1 || payload.blue_capacity < 1 || payload.red_capacity > 50 || payload.blue_capacity > 50 || !Number.isFinite(payload.duration_hours) || payload.duration_hours <= 0 || payload.duration_hours > 24) {
-        showRoomHint('createRoomHint', 'Periksa kapasitas tim (1–50) dan durasi (maksimal 24 jam).', true); return;
-    }
-    const button = $('createRoomBtn'); button.disabled = true;
-    showRoomHint('createRoomHint', 'Membuat room...');
-    try {
-        const result = await api('/api/rooms/create', { method: 'POST', body: JSON.stringify(payload) });
-        showRoomHint('createRoomHint', `Room dibuat. Kode: ${result.room.room_code}`);
-        enterLobby(result.room, payload.team_code);
-    } catch (error) {
-        showRoomHint('createRoomHint', error.message, true);
-    } finally { button.disabled = false; }
+$('createRoomBtn').addEventListener('click',async()=>{
+    if(!player)return;
+    const teams=Array.from(document.querySelectorAll('.team-capacity-input')).map(input=>({team_code:input.dataset.teamCode,capacity:Number(input.value)}));
+    const payload={match_name:$('createRoomName').value.trim(),host_player_id:player.id,team_code:$('hostTeam').value,teams,arena_name:$('roomArena').value.trim()};
+    if(!payload.match_name||!payload.arena_name){showRoomHint('createRoomHint','Nama room dan arena wajib diisi.',true);return;}
+    if(teams.length<2||teams.some(t=>!Number.isInteger(t.capacity)||t.capacity<1||t.capacity>50)){showRoomHint('createRoomHint','Kapasitas setiap tim harus antara 1–50 pemain.',true);return;}
+    if(teams.find(t=>t.team_code===payload.team_code).capacity<1){showRoomHint('createRoomHint','Kapasitas tim Host tidak valid.',true);return;}
+    const button=$('createRoomBtn');button.disabled=true;showRoomHint('createRoomHint','Membuat room...');
+    try{const result=await api('/api/rooms/create',{method:'POST',body:JSON.stringify(payload)});showRoomHint('createRoomHint',`Room dibuat. Kode: ${result.room.room_code}`);enterLobby(result.room,payload.team_code);}
+    catch(error){showRoomHint('createRoomHint',error.message,true);}finally{button.disabled=false;}
 });
+
+async function loadJoinTeamsForCode() {
+    const code = $('joinRoomCode').value.trim().toUpperCase();
+    if (!/^[A-Z0-9]{8}$/.test(code)) return;
+    try {
+        const result = await api(`/api/rooms?status=waiting&search=${encodeURIComponent(code)}&page=1&page_size=5`);
+        const room = (result.data || []).find(item => item.room_code === code);
+        if (!room) return;
+        const select = $('joinTeam'); select.innerHTML = '';
+        (room.teams || []).forEach(team => { const option=document.createElement('option'); option.value=team.team_code; option.textContent=`${team.team_name} · ${team.total}/${team.capacity}${team.available<=0?' · FULL':''}`; option.disabled=team.available<=0; select.append(option); });
+    } catch (error) { console.warn('Gagal memuat konfigurasi tim room:', error); }
+}
+$('joinRoomCode').addEventListener('change', loadJoinTeamsForCode);
+$('joinRoomCode').addEventListener('blur', loadJoinTeamsForCode);
 
 $('joinRoomBtn').addEventListener('click', () => {
     const code = $('joinRoomCode').value.trim().toUpperCase();
@@ -624,173 +602,58 @@ function renderTeamPlayers(players, containerId) {
 // ==========================================
 
 async function refreshLobby() {
-    if (!match || !player) return;
-
-    try {
-        const result = await api(
-            `/api/matches/${match.id}/lobby`
-        );
-
-        const lobby = result.lobby;
-        match = { ...match, ...result.match };
-
-        // Keep room and team identifiers visible in the waiting room.
-        $('lobbyRoomCode').textContent =
-            result.match.room_code || match.room_code || 'ROOM CODE UNAVAILABLE';
-
-        console.log('DATA RED TEAM:', lobby.red_team);
-        console.log('DATA BLUE TEAM:', lobby.blue_team);
-
-        renderTeamPlayers(
-            lobby.red_team.players,
-            'redTeamPlayers'
-        );
-
-        renderTeamPlayers(
-            lobby.blue_team.players,
-            'blueTeamPlayers'
-        );
-
-        $('redTeamCount').textContent =
-            `${lobby.red_team.total} / ${match.red_capacity ?? lobby.red_team.total} PLAYERS`;
-
-        $('blueTeamCount').textContent =
-            `${lobby.blue_team.total} / ${match.blue_capacity ?? lobby.blue_team.total} PLAYERS`;
-
-        const playerInRed = lobby.red_team.players.some(
-            item => item.player.id === player.id
-        );
-
-        const playerInBlue = lobby.blue_team.players.some(
-            item => item.player.id === player.id
-        );
-
-        const team = playerInRed
-            ? 'RED'
-            : playerInBlue
-                ? 'BLUE'
-                : 'UNKNOWN';
-
-        $('assignment').textContent =
-            team === 'UNKNOWN'
-                ? 'NOT ASSIGNED'
-                : `${team} TEAM`;
-
-        $('assignment').className =
-            `assignment ${team.toLowerCase()}`;
-
-        $('lobbyState').textContent =
-            result.match.status.toUpperCase();
-
-        $('operationStatus').textContent =
-            result.match.status.toUpperCase();
-
-        window.currentPlayerTeam = playerInRed
-            ? 'RED'
-            : playerInBlue
-                ? 'BLUE'
-                : 'TEAM';
-
-        if (
-            result.match.status === 'active' &&
-            (playerInRed || playerInBlue)
-        ) {
-            openGameplay();
-            return;
-        }
-
-        const note = result.match.status === 'active'
-            ? 'Pertandingan telah dimulai. Ikuti instruksi admin.'
-            : result.match.status === 'completed'
-                ? 'Pertandingan telah berakhir.'
-                : 'Menunggu admin memulai pertandingan.';
-
-        const statusEl =
-            document.querySelector('.lobby-status small');
-
-        if (statusEl) {
-            statusEl.textContent =
-                `${note} (${lobby.total_players}/${lobby.max_players} pemain)`;
-        }
-
-    } catch (error) {
-        console.error('Gagal memperbarui lobby:', error);
-    }
+    if(!match||!player)return;
+    try{
+        const result=await api(`/api/matches/${match.id}/lobby`);const lobby=result.lobby;match={...match,...result.match};
+        $('lobbyRoomCode').textContent=result.match.room_code||match.room_code||'ROOM CODE UNAVAILABLE';
+        const root=$('lobbyTeams');root.innerHTML='';let ownTeam=null;
+        (lobby.teams||[]).forEach(team=>{
+            const section=document.createElement('section');section.className='lobby-team';section.style.setProperty('--team-color',team.team_color||teamColor(team.team_code));
+            const head=document.createElement('div');head.className='lobby-team-head';
+            const title=document.createElement('div');title.className='lobby-team-title';const h=document.createElement('h3');h.textContent=`${team.team_name} TEAM`;
+            const code=document.createElement('small');code.className='team-code-label';code.textContent=`TEAM CODE: ${team.team_code}`;title.append(h,code);
+            const count=document.createElement('span');count.textContent=`${team.total} / ${team.capacity} PLAYERS`;head.append(title,count);
+            const wrapper=document.createElement('div');wrapper.className='team-table-wrapper';const table=document.createElement('table');table.className='team-table';
+            table.innerHTML='<thead><tr><th>NO.</th><th>PLAYER NAME</th><th>STATUS</th></tr></thead>';
+            const tbody=document.createElement('tbody');
+            const players=team.players||[];
+            if(!players.length){const tr=document.createElement('tr');const td=document.createElement('td');td.colSpan=3;td.className='empty-team';td.textContent='Belum ada pemain.';tr.append(td);tbody.append(tr);}
+            players.forEach((item,index)=>{const p=item.player||{};const tr=document.createElement('tr');const n=document.createElement('td');n.textContent=String(index+1).padStart(2,'0');const name=document.createElement('td');const strong=document.createElement('strong');strong.textContent=p.full_name||p.username||'Unknown';const small=document.createElement('small');small.textContent=`@${p.username||'-'}`;name.append(strong,document.createElement('br'),small);const status=document.createElement('td');const badge=document.createElement('span');badge.className='table-player-status';badge.textContent=(item.player_status||'JOINED').toUpperCase();status.append(badge);tr.append(n,name,status);tbody.append(tr);});
+            table.append(tbody);wrapper.append(table);section.append(head,wrapper);root.append(section);
+            if(players.some(item=>item.player?.id===player.id))ownTeam=team;
+        });
+        const teamCode=ownTeam?.team_code||'UNKNOWN';
+        $('assignment').textContent=teamCode==='UNKNOWN'?'NOT ASSIGNED':`${teamCode} TEAM`;
+        $('assignment').style.color=ownTeam?.team_color||'';$('assignment').style.borderColor=ownTeam?.team_color||'';
+        $('lobbyState').textContent=result.match.status.toUpperCase();$('operationStatus').textContent=result.match.status.toUpperCase();window.currentPlayerTeam=teamCode;
+        if(result.match.status==='active'&&ownTeam){openGameplay();return;}
+        const note=result.match.status==='active'?'Pertandingan telah dimulai. Ikuti instruksi admin.':result.match.status==='completed'?'Pertandingan telah berakhir.':'Menunggu admin memulai pertandingan.';
+        const statusEl=document.querySelector('.lobby-status small');if(statusEl)statusEl.textContent=`${note} (${lobby.total_players}/${lobby.max_players} pemain)`;
+    }catch(error){console.error('Gagal memperbarui lobby:',error);}
 }
 
 // ==========================================
-// GAMEPLAY MATCH TIMER
+// GAMEPLAY REAL-TIME DIGITAL CLOCK
 // ==========================================
-
-function formatMatchTime(totalSeconds) {
-    const safe = Math.max(0, Math.floor(totalSeconds));
-    const hours = Math.floor(safe / 3600);
-    const minutes = Math.floor((safe % 3600) / 60);
-    const seconds = safe % 60;
-    return [hours, minutes, seconds]
-        .map(value => String(value).padStart(2, '0'))
-        .join(':');
-}
 
 function renderMatchTimer() {
-    const timer = $('gameplayTimer');
+    const clock = $('gameplayTimer');
     const status = $('gameplayTimerStatus');
-    const card = timer?.closest('.match-timer-card');
-    if (!timer || !matchEndsAt) return;
+    if (!clock) return;
 
-    const remaining = Math.max(0, Math.ceil((matchEndsAt - Date.now()) / 1000));
-    timer.textContent = formatMatchTime(remaining);
-    card?.classList.toggle('warning', remaining > 0 && remaining <= 300);
-
-    if (remaining <= 0) {
-        timer.textContent = '00:00:00';
-        card?.classList.add('expired');
-        if (status) status.textContent = 'TIME EXPIRED';
-        $('gameplayStatus').textContent = 'COMPLETED';
-        $('operationStatus').textContent = 'COMPLETED';
-        if (!timerExpiredHandled) {
-            timerExpiredHandled = true;
-            stopGameplayTimer();
-            stopGameplayCamera();
-            stopGameplayHealthPolling();
-            if (status) status.textContent = 'MATCH COMPLETED';
-            alert('Waktu pertandingan telah habis. Pertandingan selesai.');
-        }
-    } else if (status) {
-        status.textContent = remaining <= 300 ? 'FINAL COUNTDOWN' : 'MATCH IN PROGRESS';
-    }
-}
-
-async function syncGameplayTimer() {
-    if (!match || !gameplayOpened) return;
-    try {
-        const result = await api(`/api/matches/${match.id}/timer`);
-        if (result.ends_at) matchEndsAt = new Date(result.ends_at).getTime();
-        if (result.status === 'completed') {
-            matchEndsAt = Math.min(matchEndsAt || Date.now(), Date.now());
-        }
-        renderMatchTimer();
-    } catch (error) {
-        console.error('Gagal sinkronisasi match timer:', error);
-        if ($('gameplayTimerStatus')) $('gameplayTimerStatus').textContent = 'SYNC RETRY';
-    }
+    // Use the device's local time; this is a clock, not a match countdown.
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    clock.textContent = `${hours}:${minutes}:${seconds}`;
+    if (status) status.textContent = 'REAL-TIME CLOCK';
 }
 
 function startGameplayTimer() {
     stopGameplayTimer();
-    timerExpiredHandled = false;
-    const startedAt = match?.started_at ? new Date(match.started_at).getTime() : NaN;
-    const durationHours = Number(match?.duration_hours);
-    if (Number.isFinite(startedAt) && Number.isFinite(durationHours) && durationHours > 0) {
-        matchEndsAt = startedAt + durationHours * 3600000;
-    } else {
-        matchEndsAt = null;
-        $('gameplayTimer').textContent = '--:--:--';
-        $('gameplayTimerStatus').textContent = 'TIME NOT SET';
-    }
-    syncGameplayTimer();
+    renderMatchTimer();
     timerTickHandle = setInterval(renderMatchTimer, 1000);
-    timerSyncHandle = setInterval(syncGameplayTimer, 10000);
 }
 
 function stopGameplayTimer() {
@@ -1443,7 +1306,7 @@ async function finishBaseShutdown(payload){
 async function processBaseShutdownPayload(payload){
   if(!player||!match||baseShutdownBusy)return;const clean=String(payload||'').trim();
   if(!clean.startsWith('OPS-BASE-SHUTDOWN:')){setBaseShutdownStatus('QR bukan QR Base Shutdown.',true);return;}
-  const code=clean.slice('OPS-BASE-SHUTDOWN:'.length).trim();if(!['BASE-RED','BASE-BLUE'].includes(code)){setBaseShutdownStatus('Kode base tidak valid.',true);return;}
+  const code=clean.slice('OPS-BASE-SHUTDOWN:'.length).trim();if(!/^BASE-(RED|BLUE|GREEN|YELLOW|PURPLE|ORANGE)$/.test(code)){setBaseShutdownStatus('Kode base tidak valid.',true);return;}
   // Backend performs the authoritative team/match validation after the countdown.
   if(baseShutdownScanner){const sc=baseShutdownScanner;baseShutdownScanner=null;try{await sc.stop();}catch(_){}try{sc.clear();}catch(_){}}
   await finishBaseShutdown(clean);
@@ -1469,6 +1332,30 @@ $('shootBtn').addEventListener(
     'click',
     sendShootEvent
 );
+
+// GAME ACTIONS DROPDOWN
+const gameActionsDropdown = $('gameplayActionDropdown');
+const gameActionsToggle = $('gameActionsToggle');
+const gameActionsMenu = $('gameplayActionMenu');
+function setGameActionsDropdown(open) {
+  if (!gameActionsDropdown || !gameActionsToggle || !gameActionsMenu) return;
+  gameActionsDropdown.classList.toggle('is-open', open);
+  gameActionsMenu.classList.toggle('hidden', !open);
+  gameActionsToggle.setAttribute('aria-expanded', String(open));
+}
+gameActionsToggle?.addEventListener('click', (event) => {
+  event.stopPropagation();
+  setGameActionsDropdown(gameActionsMenu?.classList.contains('hidden'));
+});
+gameActionsMenu?.addEventListener('click', (event) => {
+  if (event.target.closest('button')) setGameActionsDropdown(false);
+});
+document.addEventListener('click', (event) => {
+  if (gameActionsDropdown && !gameActionsDropdown.contains(event.target)) setGameActionsDropdown(false);
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') setGameActionsDropdown(false);
+});
 
 $('scanWeaponQrBtn').addEventListener('click', startWeaponQrScanner);
 $('scanBaseShutdownBtn').addEventListener('click', startBaseShutdownScanner);
