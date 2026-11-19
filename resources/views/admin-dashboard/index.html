@@ -1,161 +1,16 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OPERATION: SURABAYA — Command Center</title>
-    <link rel="stylesheet" href="style.css?v=4">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
-    <style>
-        /* Map Container & Dark Tactical Tile Theme */
-        .map-wrapper {
-            position: relative;
-            border: 1px solid var(--line);
-            background: #0a1017;
-            overflow: hidden;
-        }
-        #tacticalMap {
-            width: 100%;
-            height: 275px;
-            background: #0a1017;
-            z-index: 1;
-        }
-        .leaflet-tile-pane {
-            filter: invert(100%) hue-rotate(180deg) brightness(92%) contrast(95%);
-        }
-        .leaflet-control-attribution {
-            background: rgba(10, 16, 23, 0.8) !important;
-            color: var(--muted) !important;
-            font-size: 9px !important;
-        }
-        .leaflet-control-attribution a {
-            color: var(--lime) !important;
-        }
-        .leaflet-popup-content-wrapper,
-        .leaflet-popup-tip {
-            background: #0d151e !important;
-            color: #e6edf3 !important;
-            border: 1px solid var(--line);
-            border-radius: 2px !important;
-            font-family: 'DM Mono', monospace;
-            font-size: 11px;
-        }
-
-        /* Player & Base Dots */
-        .player-dot-marker {
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            border: 2px solid #ffffff;
-            box-shadow: 0 0 10px currentColor;
-            transition: transform 0.2s ease;
-        }
-        .player-dot-marker.red {
-            background: #ff4d4d;
-            color: #ff4d4d;
-        }
-        .player-dot-marker.blue {
-            background: #3b9eff;
-            color: #3b9eff;
-        }
-        .player-dot-marker.eliminated {
-            background: #5c6773;
-            color: #5c6773;
-            opacity: 0.65;
-        }
-        .player-dot-marker.ghost {
-            box-shadow: 0 0 0 4px rgba(240, 184, 75, 0.45), 0 0 12px #f0b84b;
-            border-color: #f0b84b;
-        }
-        .player-map-label {
-            background: rgba(10, 16, 23, 0.88) !important;
-            border: 1px solid var(--line) !important;
-            color: #e6edf3 !important;
-            font: 700 9px 'DM Mono', monospace !important;
-            padding: 1px 5px !important;
-            box-shadow: none !important;
-        }
-        .player-map-label::before {
-            display: none !important;
-        }
-        .base-square-marker {
-            width: 18px;
-            height: 18px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font: 700 10px 'DM Mono', monospace;
-            color: #fff;
-            border: 1px solid #fff;
-        }
-        .base-square-marker.red { background: rgba(235, 77, 75, 0.9); }
-        .base-square-marker.blue { background: rgba(52, 152, 219, 0.9); }
-
-        .map-head-actions {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .btn-mini {
-            background: #111a24;
-            color: var(--lime);
-            border: 1px solid var(--line);
-            padding: 3px 8px;
-            font: 700 10px 'DM Mono', monospace;
-            cursor: pointer;
-        }
-        .btn-mini:hover {
-            border-color: var(--lime);
-        }
-
-        /* Overall Distance Bar */
-        .mobility-panel {
-            margin-top: 10px;
-            border: 1px solid var(--line);
-            background: #0d151e;
-            padding: 10px 12px;
-        }
-        .mobility-header {
-            display: flex;
-            justify-content: space-between;
-            font: 9px 'DM Mono', monospace;
-            color: var(--muted);
-            margin-bottom: 6px;
-        }
-        .mobility-teams {
-            display: flex;
-            justify-content: space-between;
-            font: 10px 'DM Mono', monospace;
-        }
-        .mobility-teams strong {
-            display: block;
-            font-size: 13px;
-            margin-top: 2px;
-        }
-        .mobility-bar-track {
-            display: flex;
-            height: 6px;
-            background: #1d2733;
-            border-radius: 6px;
-            overflow: hidden;
-            margin-top: 8px;
-        }
-        .mobility-bar-red {
-            background: var(--red);
-            height: 100%;
-            transition: width 0.35s ease;
-        }
-        .mobility-bar-blue {
-            background: var(--blue);
-            height: 100%;
-            transition: width 0.35s ease;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
     <aside class="sidebar">
-        <a class="brand" href="index.html">
+        <a class="brand" href="#">
             <span class="brand-mark">F</span>
             <span>
                 OPERATION: <span class="muted">SURABAYA</span>
@@ -165,8 +20,9 @@
 
         <div class="nav-label">OPERATIONS</div>
         <a class="nav active" href="#overview">▦ <span>Overview</span></a>
-        <a class="nav" href="#map">⌖ <span>Field Map</span></a>
-        <a class="nav" href="history.html">↺ <span>Match History</span></a>
+        <a class="nav" href="#map">⌖ <span>Live Map</span></a>
+        <a class="nav" href="#analytics">◫ <span>Player Analytics</span></a>
+        <a class="nav" href="#logs">≡ <span>Event Log</span></a>
 
         <div class="side-bottom">
             <span class="admin-dot"></span>
@@ -204,43 +60,60 @@
         </section>
 
         <section class="overview" id="overview">
-            <div class="team-panels-grid" id="teamPanels">
-                <div class="chart-empty">Menunggu konfigurasi tim pertandingan...</div>
+
+            <div class="team-panel red">
+                <div class="team-title">
+                    <span>R</span>
+                    <div>
+                        <small>FACTION 01</small>
+                        <h2>RED TEAM</h2>
+                    </div>
+                    <b id="redCount">0 PLAYERS</b>
+                </div>
+
+                <div class="empty">Belum ada pemain terhubung</div>
+                <div id="redPlayers"></div>
             </div>
+
             <div class="map-panel" id="map">
                 <div class="panel-head">
                     <div>
-                        <small>ARENA INTELLIGENCE · PLAYER TRACKING</small>
+                        <small>ARENA INTELLIGENCE</small>
                         <h2>LIVE FIELD MAP</h2>
                     </div>
-                    <div class="map-head-actions">
-                        <button class="btn-mini" id="recenterMapBtn" title="Pusatkan Peta">⌖ CENTER</button>
-                        <span class="map-status">AWAITING DATA</span>
-                    </div>
+                    <span class="map-status">AWAITING DATA</span>
                 </div>
 
-                <div class="map-wrapper">
-                    <div id="tacticalMap"></div>
-                </div>
-
-                <div class="mobility-panel">
-                    <div class="mobility-header">
-                        <span>JARAK TEMPUH KESELURUHAN</span>
-                        <span id="totalArenaDistance">TOTAL: 0.00 m</span>
+                <div class="map-placeholder">
+                    <div class="grid-lines"></div>
+                    <div class="map-cross">⌖</div>
+                    <div class="map-center">
+                        MAP DATA NOT CONNECTED
+                        <small>Integrasi Leaflet / OpenStreetMap</small>
                     </div>
-
-                    <div class="mobility-teams" id="teamMobilityStats">
-                        <span class="chart-empty">Statistik jarak per tim akan muncul di sini.</span>
-                    </div>
-                    <div class="mobility-bar-track dynamic-mobility-track" id="teamMobilityBars"></div>
+                    <span class="coord c1">LAT — / LNG —</span>
+                    <span class="coord c2">ZONE 00</span>
                 </div>
 
                 <div class="map-foot">
-                    <span>PLAYER TRACKING <b id="activeUnitsVal">0 UNITS</b></span>
-                    <span>BASE STATUS <b id="overallBaseVal">STANDBY</b></span>
+                    <span>PLAYER TRACKING <b>INACTIVE</b></span>
+                    <span>BASE STATUS <b>UNKNOWN</b></span>
                 </div>
             </div>
 
+            <div class="team-panel blue">
+                <div class="team-title">
+                    <span>B</span>
+                    <div>
+                        <small>FACTION 02</small>
+                        <h2>BLUE TEAM</h2>
+                    </div>
+                    <b id="blueCount">0 PLAYERS</b>
+                </div>
+
+                <div class="empty">Belum ada pemain terhubung</div>
+                <div id="bluePlayers"></div>
+            </div>
 
         </section>
 
@@ -270,14 +143,14 @@
                     </div>
 
                     <div class="log-actions">
-                        <span class="muted-tag" id="eventCountTag">0 EVENTS</span>
+                        <span class="muted-tag">0 EVENTS</span>
                         <button class="btn clear-log" id="clearLogBtn" disabled>
                             CLEAR LOG
                         </button>
                     </div>
                 </div>
 
-                <div class="log-empty" id="logEmpty">
+                <div class="log-empty">
                     Belum ada aktivitas pertandingan.
                 </div>
 
@@ -322,7 +195,6 @@
 
     </main>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-    <script src="app.js?v=4"></script>
+    <script src="app.js"></script>
 </body>
 </html>

@@ -533,11 +533,8 @@ def start_base_shutdown(match_id: str, data: BaseShutdownRequest):
 
         attacker = str(team_res.data[0].get("team_code", "")).upper()
         defender = str(station_res.data[0].get("team_code", "")).upper()
-        configured = supabase.table("match_teams").select("team_id").eq("match_id", match_id).execute().data or []
-        configured_ids = {row.get("team_id") for row in configured}
-        defender_team = supabase.table("teams").select("id").eq("team_code", defender).limit(1).execute().data or []
-        if member.get("team_id") not in configured_ids or not defender_team or defender_team[0]["id"] not in configured_ids:
-            raise HTTPException(status_code=400, detail="Identitas base tidak termasuk konfigurasi tim room ini")
+        if attacker not in ("RED", "BLUE") or defender not in ("RED", "BLUE"):
+            raise HTTPException(status_code=400, detail="Identitas tim tidak valid")
         if attacker == defender:
             raise HTTPException(status_code=403, detail="Kamu tidak dapat menonaktifkan base tim sendiri")
         if member.get("is_eliminated") or member.get("player_status") == "eliminated" or (member.get("current_health") or 0) <= 0:
@@ -600,11 +597,8 @@ def complete_base_shutdown(match_id: str, data: BaseShutdownRequest):
         defender = str(station.get("team_code", "")).upper()
         if attacker == defender:
             raise HTTPException(status_code=403, detail="Kamu tidak dapat menonaktifkan base tim sendiri")
-        configured = supabase.table("match_teams").select("team_id").eq("match_id", match_id).execute().data or []
-        configured_ids = {row.get("team_id") for row in configured}
-        defender_team = supabase.table("teams").select("id").eq("team_code", defender).limit(1).execute().data or []
-        if member.get("team_id") not in configured_ids or not defender_team or defender_team[0]["id"] not in configured_ids:
-            raise HTTPException(status_code=400, detail="Identitas base tidak termasuk konfigurasi tim room ini")
+        if attacker not in ("RED", "BLUE") or defender not in ("RED", "BLUE"):
+            raise HTTPException(status_code=400, detail="Identitas tim tidak valid")
         if member.get("is_eliminated") or member.get("player_status") == "eliminated" or (member.get("current_health") or 0) <= 0:
             raise HTTPException(status_code=400, detail="Pemain tereliminasi tidak dapat melakukan shutdown")
 
@@ -896,15 +890,15 @@ def admin_update_weapon_level(match_id: str, data: WeaponLevelUpdate):
 
 
 # ==========================================
-# MATCH CLOCK API (legacy endpoint)
+# MATCH TIMER CONTROLLER
 # ==========================================
 
 def get_match_timer(match_id: str):
-    """Return match status and start time; matches no longer expire by duration."""
+    """Mengambil sisa waktu pertandingan dan mengakhiri match saat waktunya habis."""
     try:
         response = (
             supabase.table("matches")
-            .select("id, status, started_at, ended_at")
+            .select("id, status, started_at, ended_at, duration_hours")
             .eq("id", match_id)
             .limit(1)
             .execute()
@@ -913,15 +907,47 @@ def get_match_timer(match_id: str):
             raise HTTPException(status_code=404, detail="Pertandingan tidak ditemukan")
 
         match_data = response.data[0]
+        now = datetime.now(timezone.utc)
+        started_raw = match_data.get("started_at")
+        duration_hours = match_data.get("duration_hours")
+
+        if not started_raw or not duration_hours:
+            return {
+                "success": True,
+                "status": match_data["status"],
+                "started_at": started_raw,
+                "ends_at": None,
+                "remaining_seconds": None
+            }
+
+        started_at = datetime.fromisoformat(started_raw.replace("Z", "+00:00"))
+        ends_at = started_at + timedelta(hours=float(duration_hours))
+        remaining_seconds = max(0, int((ends_at - now).total_seconds()))
+
+        if match_data["status"] == "active" and remaining_seconds <= 0:
+            ended = (
+                supabase.table("matches")
+                .update({
+                    "status": "completed",
+                    "ended_at": now.isoformat()
+                })
+                .eq("id", match_id)
+                .eq("status", "active")
+                .execute()
+            )
+            if ended.data:
+                match_data["status"] = "completed"
+                match_data["ended_at"] = ended.data[0].get("ended_at")
+
         return {
             "success": True,
             "status": match_data["status"],
-            "started_at": match_data.get("started_at"),
-            "ended_at": match_data.get("ended_at"),
-            "server_time": datetime.now(timezone.utc).isoformat(),
-            "remaining_seconds": None,
-            "ends_at": None
+            "started_at": started_at.isoformat(),
+            "ends_at": ends_at.isoformat(),
+            "remaining_seconds": remaining_seconds,
+            "ended_at": match_data.get("ended_at")
         }
+
     except HTTPException:
         raise
     except Exception as error:
@@ -929,96 +955,128 @@ def get_match_timer(match_id: str):
 
 
 # ==========================================
-# MATCH EVENTS & ANALYTICS
+# MATCH EVENT LOG CONTROLLERS
 # ==========================================
 
 def get_match_events(match_id: str, limit: int = 50):
-    """Ambil riwayat event pertandingan, terbaru lebih dahulu."""
     try:
-        safe_limit = max(1, min(int(limit), 500))
-        response = (
-            supabase.table("game_events")
-            .select("*")
-            .eq("match_id", match_id)
-            .limit(safe_limit)
+        match_response = (
+            supabase.table("matches")
+            .select("id")
+            .eq("id", match_id)
+            .limit(1)
             .execute()
         )
 
-        events = response.data or []
-        events = sorted(
-            events,
-            key=lambda item: str(item.get("created_at") or ""),
-            reverse=True
+        if not match_response.data:
+            raise HTTPException(
+                status_code=404,
+                detail="Pertandingan tidak ditemukan"
+            )
+
+        events_response = (
+            supabase.table("game_events")
+            .select("*")
+            .eq("match_id", match_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
         )
+
+        events = events_response.data or []
+
         return {
             "success": True,
             "match_id": match_id,
             "total_events": len(events),
             "events": events
         }
+
+    except HTTPException:
+        raise
+
     except Exception as error:
-        print("GET MATCH EVENTS ERROR:", repr(error))
         raise HTTPException(
             status_code=500,
-            detail="Gagal mengambil event pertandingan"
+            detail=str(error)
         )
 
 
 def clear_match_events(match_id: str):
-    """Hapus seluruh riwayat event untuk satu pertandingan."""
     try:
-        response = (
+        match_response = (
+            supabase.table("matches")
+            .select("id")
+            .eq("id", match_id)
+            .limit(1)
+            .execute()
+        )
+
+        if not match_response.data:
+            raise HTTPException(
+                status_code=404,
+                detail="Pertandingan tidak ditemukan"
+            )
+
+        delete_response = (
             supabase.table("game_events")
             .delete()
             .eq("match_id", match_id)
             .execute()
         )
-        deleted_events = response.data or []
+
         return {
             "success": True,
-            "message": "Riwayat event pertandingan berhasil dibersihkan",
-            "match_id": match_id,
-            "deleted_count": len(deleted_events)
+            "message": "Seluruh event berhasil dihapus",
+            "deleted_count": len(delete_response.data or [])
         }
+
+    except HTTPException:
+        raise
+
     except Exception as error:
-        print("CLEAR MATCH EVENTS ERROR:", repr(error))
         raise HTTPException(
             status_code=500,
-            detail="Gagal menghapus event pertandingan"
+            detail=str(error)
         )
 
 
-
 def get_match_analytics(match_id: str):
-    """Mengambil statistik setiap pemain untuk Match History Dashboard."""
     try:
-        # 1. Ambil anggota pertandingan
+        match_response = (
+            supabase.table("matches")
+            .select("*")
+            .eq("id", match_id)
+            .limit(1)
+            .execute()
+        )
+
+        if not match_response.data:
+            raise HTTPException(
+                status_code=404,
+                detail="Pertandingan tidak ditemukan"
+            )
+
         members_response = (
             supabase.table("match_players")
             .select("*")
             .eq("match_id", match_id)
             .execute()
         )
+
         members = members_response.data or []
 
         if not members:
             return {
                 "success": True,
                 "match_id": match_id,
-                "total_events": 0,
+                "total_players": 0,
                 "players": []
             }
 
-        player_ids = list(set(
-            member["player_id"] for member in members
-        ))
+        player_ids = list(set(item["player_id"] for item in members))
+        team_ids = list(set(item["team_id"] for item in members))
 
-        team_ids = list(set(
-            member["team_id"] for member in members
-            if member.get("team_id")
-        ))
-
-        # 2. Ambil profil pemain
         players_response = (
             supabase.table("players")
             .select("id, player_number, username, full_name")
@@ -1027,133 +1085,99 @@ def get_match_analytics(match_id: str):
         )
 
         player_map = {
-            player["id"]: player
-            for player in (players_response.data or [])
+            p["id"]: p for p in (players_response.data or [])
         }
 
-        # 3. Ambil data tim
-        team_response = (
+        teams_response = (
             supabase.table("teams")
-            .select("id, team_code")
+            .select("id, team_code, team_name")
             .in_("id", team_ids)
             .execute()
         )
 
         team_map = {
-            team["id"]: team.get("team_code")
-            for team in (team_response.data or [])
+            t["id"]: t for t in (teams_response.data or [])
         }
 
-        # 4. Ambil seluruh event pertandingan
         events_response = (
             supabase.table("game_events")
             .select("*")
             .eq("match_id", match_id)
+            .order("created_at", desc=False)
             .execute()
         )
 
         events = events_response.data or []
 
-        # 5. Siapkan statistik setiap pemain
         analytics = {}
 
         for member in members:
-            player_id = member["player_id"]
-            player = player_map.get(player_id, {})
+            player = player_map.get(member["player_id"])
+            team = team_map.get(member["team_id"])
 
-            analytics[str(player_id)] = {
-                "player_id": player_id,
-                "player_number": player.get("player_number"),
-                "username": player.get("username", "Unknown"),
-                "full_name": player.get("full_name", "Unknown"),
-                "team_code": team_map.get(member.get("team_id"), "-"),
+            if not player or not team:
+                continue
+
+            analytics[player["id"]] = {
+                "player_id": player["id"],
+                "username": player["username"],
+                "full_name": player["full_name"],
+                "team": team["team_name"],
+                "team_code": team["team_code"],
                 "total_shots": 0,
                 "total_hit_given": 0,
                 "total_hit_received": 0,
-                "accuracy_percent": 0,
                 "total_heal": 0,
+                "total_steps": 0,
                 "distance_meters": 0
             }
 
-        # 6. Hitung statistik berdasarkan event
+        movement_recorded = set()
+
         for event in events:
             actor_id = event.get("actor_player_id")
             target_id = event.get("target_player_id")
-            event_type = str(
-                event.get("event_type") or ""
-            ).lower()
+            event_type = event.get("event_type")
+            event_data = event.get("event_data") or {}
 
-            actor_key = str(actor_id) if actor_id else None
-            target_key = str(target_id) if target_id else None
+            if event_type == "player_shot":
+                if actor_id in analytics:
+                    analytics[actor_id]["total_shots"] += 1
 
-            # Jumlah tembakan
-            if event_type == "player_shot" and actor_key in analytics:
-                analytics[actor_key]["total_shots"] += 1
+            elif event_type == "player_hit":
+                if actor_id in analytics:
+                    analytics[actor_id]["total_hit_given"] += 1
 
-            # Jumlah healing
-            if event_type == "player_heal" and actor_key in analytics:
-                analytics[actor_key]["total_heal"] += 1
+                if target_id in analytics:
+                    analytics[target_id]["total_hit_received"] += 1
 
-            # Event hit / damage
-            if event_type in (
-                "player_hit",
-                "player_damage",
-                "player_shot_hit"
-            ):
-                if actor_key in analytics:
-                    analytics[actor_key]["total_hit_given"] += 1
+            elif event_type == "player_heal":
+                if actor_id in analytics:
+                    analytics[actor_id]["total_heal"] += 1
 
-                if target_key in analytics:
-                    analytics[target_key]["total_hit_received"] += 1
-
-            # Jarak jika tersedia dalam event_data
-            if actor_key in analytics:
-                event_data = event.get("event_data") or {}
-
-                distance = event_data.get("distance_meters", 0)
-
-                try:
-                    analytics[actor_key]["distance_meters"] += float(
-                        distance or 0
+            elif event_type == "player_movement":
+                if actor_id in analytics and actor_id not in movement_recorded:
+                    analytics[actor_id]["total_steps"] = event_data.get(
+                        "total_steps", 0
                     )
-                except (TypeError, ValueError):
-                    pass
-
-        # 7. Hitung akurasi
-        for player in analytics.values():
-            shots = player["total_shots"]
-            hits = player["total_hit_given"]
-
-            if shots > 0:
-                player["accuracy_percent"] = round(
-                    (hits / shots) * 100, 2
-                )
-
-        team_analytics = {}
-        for player_data in analytics.values():
-            code = player_data.get("team_code") or "-"
-            aggregate = team_analytics.setdefault(code, {
-                "team_code": code, "total_players": 0, "total_shots": 0,
-                "total_hit_given": 0, "total_hit_received": 0, "total_heal": 0,
-                "distance_meters": 0
-            })
-            aggregate["total_players"] += 1
-            for key in ("total_shots", "total_hit_given", "total_hit_received", "total_heal", "distance_meters"):
-                aggregate[key] += player_data.get(key, 0)
-        for aggregate in team_analytics.values():
-            aggregate["accuracy_percent"] = round(aggregate["total_hit_given"] / aggregate["total_shots"] * 100, 2) if aggregate["total_shots"] else 0
+                    analytics[actor_id]["distance_meters"] = event_data.get(
+                        "distance_meters", 0
+                    )
+                    movement_recorded.add(actor_id)
 
         return {
             "success": True,
             "match_id": match_id,
-            "total_events": len(events),
-            "players": list(analytics.values()),
-            "teams": list(team_analytics.values())
+            "total_players": len(analytics),
+            "players": list(analytics.values())
         }
 
+    except HTTPException:
+        raise
+
     except Exception as error:
-        print("GET MATCH ANALYTICS ERROR:", repr(error))
+        print("PLAYER ANALYTICS ERROR:", repr(error))
         raise HTTPException(
             status_code=500,
-            detail="Gagal mengambil analytics pertandingan"
+            detail="Gagal mengambil data Player Analytics"
         )
