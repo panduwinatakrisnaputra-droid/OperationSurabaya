@@ -4,9 +4,63 @@ const start = document.getElementById('startBtn');
 const stop = document.getElementById('stopBtn');
 const state = document.getElementById('matchState');
 const deleteAllBtn = document.getElementById('deleteAllBtn');
+const recenterMapBtn = document.getElementById('recenterMapBtn');
 
 let currentMatch = null;
 let refreshTimer = null;
+
+// Koordinat Arena Surabaya (PENS)
+const ARENA_CENTER = [-7.2758, 112.7949];
+const LEGACY_BASE_COORDS = { RED: [-7.2758, 112.7940], BLUE: [-7.2758, 112.7958] };
+
+let tacticalMap = null;
+let playerMarkersLayer = null;
+let baseMarkersLayer = null;
+
+// ==============================
+// INITIALIZE TACTICAL MAP
+// ==============================
+
+function initTacticalMap() {
+    const mapEl = document.getElementById('tacticalMap');
+    if (!mapEl || typeof L === 'undefined') return;
+
+    tacticalMap = L.map('tacticalMap', {
+        center: ARENA_CENTER,
+        zoom: 17,
+        zoomControl: true
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 20,
+        attribution: '&copy; OpenStreetMap'
+    }).addTo(tacticalMap);
+
+    // Batas Zona Arena
+    L.circle(ARENA_CENTER, {
+        radius: 150,
+        color: '#a3e635',
+        weight: 1,
+        dashArray: '4 4',
+        fillColor: '#a3e635',
+        fillOpacity: 0.04
+    }).addTo(tacticalMap);
+
+    baseMarkersLayer = L.layerGroup().addTo(tacticalMap);
+    playerMarkersLayer = L.layerGroup().addTo(tacticalMap);
+
+    setTimeout(() => {
+        tacticalMap.invalidateSize();
+    }, 250);
+}
+
+if (recenterMapBtn) {
+    recenterMapBtn.addEventListener('click', () => {
+        if (!tacticalMap) return;
+        tacticalMap.setView(ARENA_CENTER, 17);
+        tacticalMap.invalidateSize();
+    });
+}
 
 // ==============================
 // API
@@ -59,11 +113,11 @@ function renderTeam(containerId, countId, team, color, healthMap = new Map()) {
     const container = document.getElementById(containerId);
     const count = document.getElementById(countId);
 
-    if (!container || !count) return;
+    if (!container) return;
 
     const list = team?.players || [];
 
-    count.textContent = `${list.length} PLAYERS`;
+    if (count) count.textContent = `${list.length} PLAYERS`;
     container.innerHTML = '';
 
     const empty = container.parentElement?.querySelector('.empty');
@@ -177,6 +231,216 @@ function renderTeam(containerId, countId, team, color, healthMap = new Map()) {
     });
 }
 
+function renderDynamicTeams(teams = [], healthMap = new Map()) {
+    const grid = document.getElementById('teamPanels');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    if (!teams.length) {
+        grid.innerHTML = '<div class="chart-empty">Belum ada konfigurasi tim untuk pertandingan ini.</div>';
+        return;
+    }
+
+    teams.forEach((team, index) => {
+        const color = team.team_color || '#94A3B8';
+        const code = team.team_code || `TEAM-${index + 1}`;
+        const name = team.team_name || `${code} TEAM`;
+        const panel = document.createElement('article');
+        panel.className = 'team-panel';
+        panel.style.setProperty('--team-color', color);
+
+        const heading = document.createElement('div');
+        heading.className = 'team-title';
+        const emblem = document.createElement('span');
+        emblem.textContent = code.slice(0, 1);
+        const identity = document.createElement('div');
+        const faction = document.createElement('small');
+        faction.textContent = `FACTION ${String(index + 1).padStart(2, '0')}`;
+        const title = document.createElement('h2');
+        title.textContent = name.toUpperCase();
+        identity.append(faction, title);
+        const count = document.createElement('b');
+        const current = Number(team.total ?? team.players?.length ?? 0);
+        const capacity = Number(team.capacity ?? 0);
+        count.textContent = `${current}/${capacity || '—'} PLAYERS`;
+        heading.append(emblem, identity, count);
+
+        const empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = 'Belum ada pemain terhubung';
+        const players = document.createElement('div');
+        players.id = `teamPlayers-${code.replace(/[^a-z0-9_-]/gi, '-')}`;
+        panel.append(heading, empty, players);
+        grid.appendChild(panel);
+        renderTeam(players.id, null, team, color, healthMap);
+    });
+}
+
+function renderTeamMobility(analyticsPlayers = [], teams = []) {
+    const stats = document.getElementById('teamMobilityStats');
+    const bars = document.getElementById('teamMobilityBars');
+    if (!stats || !bars) return;
+
+    const distanceByTeam = new Map(teams.map(team => [team.team_code, 0]));
+    analyticsPlayers.forEach(player => {
+        const code = player.team_code || '-';
+        distanceByTeam.set(code, (distanceByTeam.get(code) || 0) + Number(player.distance_meters || 0));
+    });
+    const total = [...distanceByTeam.values()].reduce((sum, value) => sum + value, 0);
+    const totalEl = document.getElementById('totalArenaDistance');
+    if (totalEl) totalEl.textContent = `TOTAL: ${total.toFixed(2)} m`;
+    stats.innerHTML = '';
+    bars.innerHTML = '';
+
+    teams.forEach(team => {
+        const distance = distanceByTeam.get(team.team_code) || 0;
+        const color = team.team_color || '#94A3B8';
+        const line = document.createElement('div');
+        line.className = 'mobility-team-stat';
+        const label = document.createElement('span');
+        label.textContent = team.team_name || team.team_code;
+        label.style.color = color;
+        const value = document.createElement('strong');
+        value.textContent = `${distance.toFixed(2)} m`;
+        line.append(label, value);
+        stats.appendChild(line);
+
+        const segment = document.createElement('div');
+        segment.className = 'dynamic-mobility-segment';
+        segment.style.background = color;
+        segment.style.width = `${total > 0 ? (distance / total) * 100 : 100 / Math.max(teams.length, 1)}%`;
+        segment.title = `${team.team_name || team.team_code}: ${distance.toFixed(2)} m`;
+        bars.appendChild(segment);
+    });
+}
+
+// ==============================
+// MAP PLAYER DOTS & OVERALL DISTANCE
+// ==============================
+
+function renderFieldMapAndTelemetry(match, healthPlayers = [], analyticsPlayers = [], events = [], teams = []) {
+    const activeUnitsEl = document.getElementById('activeUnitsVal');
+    const overallBaseEl = document.getElementById('overallBaseVal');
+
+    const analyticsMap = new Map(analyticsPlayers.map(p => [p.player_id, p]));
+
+    // Ambil koordinat GPS terbaru tiap pemain dari event player_movement jika ada
+    const gpsMap = new Map();
+    for (const ev of events) {
+        if (ev.event_type === 'player_movement' && ev.actor_player_id && !gpsMap.has(ev.actor_player_id)) {
+            const ed = ev.event_data || {};
+            const lat = Number(ed.lat ?? ed.latitude);
+            const lng = Number(ed.lng ?? ed.longitude);
+            if (!Number.isNaN(lat) && !Number.isNaN(lng) && lat !== 0 && lng !== 0) {
+                gpsMap.set(ev.actor_player_id, { lat, lng });
+            }
+        }
+    }
+
+    // Update Titik Pemain di Peta Leaflet
+    if (tacticalMap && playerMarkersLayer) {
+        tacticalMap.invalidateSize();
+        playerMarkersLayer.clearLayers();
+        if (baseMarkersLayer) {
+            baseMarkersLayer.clearLayers();
+            teams.forEach(team => {
+                const coords = LEGACY_BASE_COORDS[team.team_code];
+                if (!coords) return;
+                const color = team.team_color || '#94A3B8';
+                const icon = L.divIcon({
+                    className: '',
+                    html: `<div class="base-square-marker" style="border-color:${color};color:${color};">${String(team.team_code).slice(0, 1)}</div>`,
+                    iconSize: [18, 18],
+                    iconAnchor: [9, 9]
+                });
+                L.marker(coords, { icon }).addTo(baseMarkersLayer)
+                    .bindPopup(`<strong>${team.team_name || team.team_code} BASE</strong>`);
+            });
+        }
+        const now = new Date();
+
+        healthPlayers.forEach((p, idx) => {
+            const stats = analyticsMap.get(p.player_id) || {};
+            const dist = Number(stats.distance_meters ?? 0);
+            const teamIndex = Math.max(0, teams.findIndex(team => team.team_code === p.team_code));
+            const teamInfo = teams[teamIndex] || {};
+            const teamColor = teamInfo.team_color || '#94A3B8';
+            const angle = (Math.PI * 2 * teamIndex) / Math.max(teams.length, 1);
+
+            let coords;
+            let posLabel;
+
+            if (gpsMap.has(p.player_id)) {
+                const g = gpsMap.get(p.player_id);
+                coords = [g.lat, g.lng];
+                posLabel = `GPS LIVE (${g.lat.toFixed(5)}, ${g.lng.toFixed(5)})`;
+            } else {
+                const radius = 0.00035 + Math.min(0.00035, dist / 100000);
+                const spread = ((idx % 4) - 1.5) * 0.00012;
+                coords = [ARENA_CENTER[0] + Math.sin(angle) * radius + spread, ARENA_CENTER[1] + Math.cos(angle) * radius];
+                posLabel = `${teamInfo.team_name || p.team_code || 'TEAM'} · ESTIMATED POSITION`;
+            }
+
+            const ghostExpiry = p.ghost_mode_until ? new Date(p.ghost_mode_until) : null;
+            const isGhost = ghostExpiry && !isNaN(ghostExpiry) && ghostExpiry > now && !p.is_eliminated;
+
+            const dotClasses = [
+                'player-dot-marker',
+                p.is_eliminated ? 'eliminated' : '',
+                isGhost ? 'ghost' : ''
+            ].filter(Boolean).join(' ');
+
+            const dotIcon = L.divIcon({
+                className: '',
+                html: `<div class="${dotClasses}" style="background:${p.is_eliminated ? '#5c6773' : teamColor};color:${teamColor};"></div>`,
+                iconSize: [16, 16],
+                iconAnchor: [8, 8]
+            });
+
+            const playerName = p.full_name || p.username || 'Player';
+            const popupHtml = `
+                <div style="min-width:150px;">
+                    <strong style="color:${teamColor};">${playerName}</strong><br>
+                    <span>TIM: ${p.team_code} · HP: ${p.current_health ?? 100}/${p.max_health ?? 100}</span><br>
+                    <span>JARAK TEMPUH: <b>${dist.toFixed(2)} m</b></span><br>
+                    <small style="color:#8b949e;">${posLabel}</small>
+                </div>
+            `;
+
+            L.marker(coords, { icon: dotIcon })
+                .bindTooltip(`#${p.player_number ?? '-'} ${playerName}`, {
+                    permanent: true,
+                    direction: 'top',
+                    offset: [0, -8],
+                    className: 'player-map-label'
+                })
+                .bindPopup(popupHtml)
+                .addTo(playerMarkersLayer);
+        });
+    }
+
+    // Update Footer Status Unit & Base
+    const aliveUnits = healthPlayers.filter(p => !p.is_eliminated).length;
+    if (activeUnitsEl) {
+        activeUnitsEl.textContent = `${aliveUnits} / ${healthPlayers.length} ACTIVE`;
+    }
+
+    if (overallBaseEl) {
+        if (match?.winner_team_code) {
+            overallBaseEl.textContent = `${match.winner_team_code} VICTORY`;
+            overallBaseEl.style.color = 'var(--lime)';
+        } else if (match?.status === 'active') {
+            overallBaseEl.textContent = 'ARENA ACTIVE';
+            overallBaseEl.style.color = 'var(--lime)';
+        } else {
+            overallBaseEl.textContent = 'STANDBY';
+            overallBaseEl.style.color = '';
+        }
+    }
+
+    renderTeamMobility(analyticsPlayers, teams);
+}
+
 // ==============================
 // MATCH STATUS
 // ==============================
@@ -198,21 +462,19 @@ function renderMatch(match) {
         state.textContent = `${match.match_name} · ${match.status.toUpperCase()}`;
     }
 
-    // Tombol START hanya aktif saat waiting
     if (start) {
         start.disabled = match.status !== 'waiting';
     }
 
-    // Tombol END hanya aktif saat active
     if (stop) {
         stop.disabled = match.status !== 'active';
     }
 
     if (mapStatus) {
         mapStatus.textContent = match.status === 'active'
-            ? 'LIVE SESSION'
+            ? 'LIVE TRACKING'
             : match.status === 'completed'
-                ? 'MATCH COMPLETED · DATA SAVED'
+                ? 'MATCH COMPLETED'
                 : 'WAITING LOBBY';
     }
 }
@@ -223,19 +485,22 @@ function renderMatch(match) {
 
 function renderEventLog(events = []) {
     const container = document.getElementById('logList');
+    const emptyEl = document.getElementById('logEmpty');
+    const countTag = document.getElementById('eventCountTag');
+
+    if (countTag) {
+        countTag.textContent = `${events.length} EVENTS`;
+    }
 
     if (!container) return;
 
     container.innerHTML = '';
 
-    if (!events.length) {
-        container.innerHTML = `
-            <div class="log-empty">
-                Belum ada aktivitas pertandingan.
-            </div>
-        `;
-        return;
+    if (emptyEl) {
+        emptyEl.style.display = events.length ? 'none' : 'block';
     }
+
+    if (!events.length) return;
 
     events.forEach(event => {
         const item = document.createElement('div');
@@ -266,7 +531,7 @@ function renderEventLog(events = []) {
 // PLAYER ANALYTICS
 // ==============================
 
-function renderPlayerAnalytics(players = []) {
+function renderPlayerAnalytics(players = [], teams = []) {
     const container = document.getElementById('playerAnalyticsList');
     const status = document.getElementById('analyticsStatus');
 
@@ -293,9 +558,8 @@ function renderPlayerAnalytics(players = []) {
         const card = document.createElement('div');
         card.className = 'player-analytics-card';
 
-        const teamClass = player.team_code === 'RED'
-            ? 'red-text'
-            : 'blue-text';
+        const teamInfo = teams.find(team => team.team_code === player.team_code) || {};
+        const teamColor = teamInfo.team_color || '#94A3B8';
 
         const heading = document.createElement('div');
         heading.className = 'player-analytics-heading';
@@ -311,8 +575,9 @@ function renderPlayerAnalytics(players = []) {
         identity.append(name, username);
 
         const team = document.createElement('span');
-        team.className = `player-team-tag ${teamClass}`;
-        team.textContent = player.team_code || player.team || '-';
+        team.className = 'player-team-tag';
+        team.style.color = teamColor;
+        team.textContent = teamInfo.team_name || player.team_code || player.team || '-';
 
         heading.append(identity, team);
 
@@ -320,8 +585,8 @@ function renderPlayerAnalytics(players = []) {
             ['TOTAL TEMBAKAN', player.total_shots ?? 0],
             ['HIT GIVEN', player.total_hit_given ?? 0],
             ['HIT RECEIVED', player.total_hit_received ?? 0],
+            ['AKURASI', `${player.accuracy_percent ?? 0}%`],
             ['TOTAL HEAL', player.total_heal ?? 0],
-            ['TOTAL LANGKAH', player.total_steps ?? 0],
             [
                 'JARAK TEMPUH',
                 `${Number(player.distance_meters ?? 0).toFixed(2)} m`
@@ -355,8 +620,9 @@ function renderPlayerAnalytics(players = []) {
 // ==============================
 
 function clearDashboard() {
-    renderTeam('redPlayers', 'redCount', { players: [] }, 'var(--red)');
-    renderTeam('bluePlayers', 'blueCount', { players: [] }, 'var(--blue)');
+    renderDynamicTeams([]);
+    renderTeamMobility([], []);
+    renderFieldMapAndTelemetry(null, [], [], [], []);
     renderPlayerAnalytics([]);
     renderEventLog([]);
 }
@@ -379,48 +645,39 @@ async function refreshDashboard() {
 
         const matchId = result.data.id;
 
-        // Ambil data utama dashboard
         const [lobbyResult, healthResult, eventResult] = await Promise.all([
             api(`/api/matches/${matchId}/lobby`),
             api(`/api/matches/${matchId}/health`),
             api(`/api/matches/${matchId}/events`)
         ]);
 
-        renderEventLog(eventResult.events || []);
+        const healthPlayers = healthResult.players || [];
+        const events = eventResult.events || [];
+
+        renderEventLog(events);
 
         const healthMap = new Map(
-            (healthResult.players || []).map(player => [
+            healthPlayers.map(player => [
                 player.player_id,
                 player
             ])
         );
 
-        renderTeam(
-            'redPlayers',
-            'redCount',
-            lobbyResult.lobby?.red_team,
-            'var(--red)',
-            healthMap
-        );
+        const configuredTeams = lobbyResult.lobby?.teams || [];
+        renderDynamicTeams(configuredTeams, healthMap);
 
-        renderTeam(
-            'bluePlayers',
-            'blueCount',
-            lobbyResult.lobby?.blue_team,
-            'var(--blue)',
-            healthMap
-        );
-
-        // Analytics
         try {
             const analyticsResult = await api(
                 `/api/matches/${matchId}/analytics`
             );
 
-            renderPlayerAnalytics(analyticsResult.players || []);
+            const analyticsPlayers = analyticsResult.players || [];
+            renderPlayerAnalytics(analyticsPlayers, configuredTeams);
+            renderFieldMapAndTelemetry(result.data, healthPlayers, analyticsPlayers, events, configuredTeams);
 
         } catch (analyticsError) {
             console.error('PLAYER ANALYTICS ERROR:', analyticsError);
+            renderFieldMapAndTelemetry(result.data, healthPlayers, [], events, configuredTeams);
 
             const status = document.getElementById('analyticsStatus');
             const container = document.getElementById('playerAnalyticsList');
@@ -482,7 +739,7 @@ if (stop) {
 
         const confirmed = confirm(
             'Akhiri pertandingan sekarang?\n\n' +
-            'Data pertandingan akan tetap tersimpan.'
+            'Data pertandingan akan tersimpan di halaman Match History.'
         );
 
         if (!confirmed) return;
@@ -497,7 +754,7 @@ if (stop) {
 
             await refreshDashboard();
 
-            alert('Pertandingan berhasil diakhiri. Data tetap tersimpan.');
+            alert('Pertandingan berhasil diakhiri dan tersimpan di Match History.');
 
         } catch (error) {
             alert(`Gagal mengakhiri pertandingan: ${error.message}`);
@@ -552,7 +809,7 @@ if (deleteAllBtn) {
 
         } finally {
             deleteAllBtn.disabled = false;
-            deleteAllBtn.textContent = 'DELETE ALL';
+            deleteAllBtn.textContent = '⌫ HAPUS ALL';
         }
     });
 }
@@ -561,6 +818,7 @@ if (deleteAllBtn) {
 // INITIALIZE
 // ==============================
 
+initTacticalMap();
 refreshDashboard();
 
 refreshTimer = setInterval(() => {

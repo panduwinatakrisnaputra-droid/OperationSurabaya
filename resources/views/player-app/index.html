@@ -174,14 +174,10 @@
           <h3>Create Room</h3>
           <label for="createRoomName">NAMA ROOM</label>
           <input id="createRoomName" maxlength="100" placeholder="Contoh: MATCH 002">
-          <div class="room-form-row">
-            <div><label for="redCapacity">KAPASITAS RED</label><input id="redCapacity" type="number" min="1" max="50" value="5"></div>
-            <div><label for="blueCapacity">KAPASITAS BLUE</label><input id="blueCapacity" type="number" min="1" max="50" value="5"></div>
-          </div>
-          <div class="room-form-row">
-            <div><label for="roomDuration">DURASI (JAM)</label><input id="roomDuration" type="number" min="0.25" max="24" step="0.25" value="1"></div>
-            <div><label for="roomArena">ARENA</label><input id="roomArena" maxlength="100" value="UNESA"></div>
-          </div>
+          <div id="createTeamEditor" class="dynamic-team-editor"></div>
+          <button type="button" class="btn outline" id="addTeamBtn">+ ADD TEAM</button>
+          <label for="roomArena">ARENA</label>
+          <input id="roomArena" maxlength="100" value="UNESA">
           <label for="hostTeam">TIM HOST</label>
           <select id="hostTeam"><option value="RED">RED TEAM</option><option value="BLUE">BLUE TEAM</option></select>
           <button class="btn primary" id="createRoomBtn">CREATE ROOM <b>↗</b></button>
@@ -280,68 +276,7 @@
         </div>
       </div>
 
-      <div class="lobby-teams">
-
-      <!-- RED TEAM -->
-      <div class="lobby-team red">
-        <div class="lobby-team-head">
-          <div class="lobby-team-title">
-            <h3>RED TEAM</h3>
-            <small class="team-code-label">TEAM CODE: <b>RED</b></small>
-          </div>
-          <span id="redTeamCount">0 / 0 PLAYERS</span>
-        </div>
-
-        <div class="team-table-wrapper">
-          <table class="team-table">
-            <thead>
-              <tr>
-                <th>NO.</th>
-                <th>PLAYER NAME</th>
-                <th>STATUS</th>
-              </tr>
-            </thead>
-            <tbody id="redTeamPlayers">
-              <tr>
-                <td colspan="3" class="empty-team">
-                  Belum ada pemain.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- BLUE TEAM -->
-      <div class="lobby-team blue">
-        <div class="lobby-team-head">
-          <div class="lobby-team-title">
-            <h3>BLUE TEAM</h3>
-            <small class="team-code-label">TEAM CODE: <b>BLUE</b></small>
-          </div>
-          <span id="blueTeamCount">0 / 0 PLAYERS</span>
-        </div>
-
-        <div class="team-table-wrapper">
-          <table class="team-table">
-            <thead>
-              <tr>
-                <th>NO.</th>
-                <th>PLAYER NAME</th>
-                <th>STATUS</th>
-              </tr>
-            </thead>
-            <tbody id="blueTeamPlayers">
-              <tr>
-                <td colspan="3" class="empty-team">
-                  Belum ada pemain.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
+      <div class="lobby-teams" id="lobbyTeams"></div>
     </div>
 
 </div>
@@ -372,10 +307,10 @@
           <small id="gameplayPlayerInfo">PLAYER · TEAM</small>
         </div>
         <div class="gameplay-topbar-right">
-          <div class="match-timer-card">
-            <small>MATCH TIME REMAINING</small>
+          <div class="match-timer-card realtime-clock-card" aria-label="Waktu lokal saat ini">
+            <small>LOCAL TIME</small>
             <strong id="gameplayTimer">--:--:--</strong>
-            <span id="gameplayTimerStatus">WAITING FOR SYNC</span>
+            <span id="gameplayTimerStatus">REAL-TIME CLOCK</span>
           </div>
           <span id="cameraStatus" class="camera-status">CAMERA STANDBY</span>
         </div>
@@ -401,19 +336,19 @@
             <span id="gameplayHealthStatus" class="health-status">ALIVE</span>
             <div id="ghostModeIndicator" class="ghost-mode-indicator hidden" aria-live="polite"><span class="ghost-mode-dot"></span> GHOST MODE <strong id="ghostModeCountdown">00:30</strong></div>
           </div>
-          <div class="gameplay-actions">
-            <button type="button" id="toggleGameplayActions" class="gameplay-actions-toggle"
-                    aria-expanded="false" aria-controls="gameplayActionBar">
-              <span class="actions-toggle-indicator" aria-hidden="true">+</span>
-              <span>GAME ACTIONS</span>
-              <small>QR MENU</small>
+          <div class="gameplay-action-dropdown" id="gameplayActionDropdown">
+            <button type="button" id="gameActionsToggle" class="game-actions-toggle" aria-expanded="false" aria-controls="gameplayActionMenu">
+              <span class="game-actions-toggle-label"><span class="game-actions-icon">⌘</span> GAME ACTIONS</span>
+              <span class="game-actions-chevron" aria-hidden="true">▾</span>
             </button>
-            <div id="gameplayActionBar" class="gameplay-action-stack hidden" aria-label="QR game actions">
-              <button type="button" id="scanWeaponQrBtn" class="weapon-scan-button"><span>01</span> WEAPON UPGRADE</button>
-              <button type="button" id="scanGhostQrBtn" class="ghost-scan-button"><span>02</span> GHOST MODE</button>
-              <button type="button" id="openHealingBtn" class="healing-open-button"><span>03</span> BASE HEALING</button>
-              <button type="button" id="scanBaseShutdownBtn" class="base-shutdown-button"><span>04</span> SHUTDOWN BASE</button>
-              <span id="weaponScanStatus" class="weapon-scan-status" aria-live="polite"></span>
+            <div class="gameplay-action-menu hidden" id="gameplayActionMenu">
+              <div class="gameplay-action-stack">
+                <button type="button" id="scanWeaponQrBtn" class="weapon-scan-button"><span>01</span> SCAN QR UPGRADE</button>
+                <button type="button" id="scanGhostQrBtn" class="ghost-scan-button"><span>02</span> GHOST MODE</button>
+                <button type="button" id="openHealingBtn" class="healing-open-button"><span>03</span> BASE HEALING</button>
+                <button type="button" id="scanBaseShutdownBtn" class="base-shutdown-button"><span>04</span> SHUTDOWN BASE</button>
+                <span id="weaponScanStatus" class="weapon-scan-status" aria-live="polite"></span>
+              </div>
             </div>
           </div>
         </div>

@@ -3,144 +3,186 @@ from fastapi import HTTPException
 from config.database import supabase
 from app.Models.match import TeamSelection, LeaveTeamRequest
 
-def get_waiting_match():
-    """Mengambil pertandingan yang sedang menunggu pemain."""
+
+def get_match_history():
+    """Mengambil riwayat pertandingan dari database yang sudah ada."""
     try:
-        response = (
+        # Ambil seluruh pertandingan
+        matches_response = (
             supabase.table("matches")
             .select("*")
-            .eq("status", "waiting")
             .order("created_at", desc=True)
-            .limit(1)
             .execute()
         )
+        matches = matches_response.data or []
 
-        if not response.data:
+        if not matches:
             return {
                 "success": True,
-                "message": "Belum ada pertandingan waiting",
-                "data": None
+                "history": []
             }
+
+        # Ambil seluruh data pemain pertandingan
+        members_response = (
+            supabase.table("match_players")
+            .select("*")
+            .execute()
+        )
+        members = members_response.data or []
+
+        # Ambil data tim
+        teams_response = (
+            supabase.table("teams")
+            .select("id, team_code")
+            .execute()
+        )
+        teams = teams_response.data or []
+
+        team_map = {
+            team["id"]: team.get("team_code")
+            for team in teams
+        }
+
+        # Ambil event pertandingan
+        events_response = (
+            supabase.table("game_events")
+            .select("*")
+            .execute()
+        )
+        events = events_response.data or []
+
+        history = []
+
+        for match in matches:
+            match_id = match["id"]
+
+            match_members = [
+                member for member in members
+                if member.get("match_id") == match_id
+            ]
+
+            match_events = [
+                event for event in events
+                if event.get("match_id") == match_id
+            ]
+
+            red_players = 0
+            blue_players = 0
+
+            for member in match_members:
+                team_code = team_map.get(member.get("team_id"))
+
+                if team_code == "RED":
+                    red_players += 1
+                elif team_code == "BLUE":
+                    blue_players += 1
+
+            # Hitung event tembakan berdasarkan jenis event.
+            total_shots = sum(
+                1 for event in match_events
+                if any(
+                    keyword in str(event.get("event_type", "")).lower()
+                    for keyword in ("shoot", "shot", "firing")
+                )
+            )
+
+            # Hitung durasi pertandingan
+            duration_seconds = None
+            started_at = match.get("started_at")
+            ended_at = match.get("ended_at")
+
+            if started_at:
+                try:
+                    start = datetime.fromisoformat(
+                        started_at.replace("Z", "+00:00")
+                    )
+
+                    end = (
+                        datetime.fromisoformat(
+                            ended_at.replace("Z", "+00:00")
+                        )
+                        if ended_at
+                        else (
+                            datetime.now(timezone.utc)
+                            if match.get("status") == "active"
+                            else None
+                        )
+                    )
+
+                    if end:
+                        duration_seconds = max(
+                            0, int((end - start).total_seconds())
+                        )
+
+                except (ValueError, TypeError):
+                    duration_seconds = None
+
+            configured = supabase.table("match_teams").select("team_id,capacity,teams(team_code,team_name,team_color)").eq("match_id", match_id).execute().data or []
+            team_stats = []
+            for config in configured:
+                team_info = config.get("teams") or {}
+                team_count = sum(1 for member in match_members if team_map.get(member.get("team_id")) == team_info.get("team_code"))
+                team_stats.append({**team_info, "total_players": team_count, "capacity": config.get("capacity")})
+
+            history.append({
+                **match,
+                "team_stats": team_stats,
+                "match_name": (
+                    match.get("match_name")
+                    or match.get("name")
+                    or "Untitled Match"
+                ),
+                "duration_seconds": duration_seconds,
+                "total_players": len(match_members),
+                "red_players": red_players,
+                "blue_players": blue_players,
+                "total_shots": total_shots,
+                "total_events": len(match_events)
+            })
 
         return {
             "success": True,
-            "data": response.data[0]
+            "history": history
         }
 
     except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error))
-
+        print("GET MATCH HISTORY ERROR:", repr(error))
+        raise HTTPException(
+            status_code=500,
+            detail="Gagal mengambil riwayat pertandingan: " + str(error)
+        )
 
 
 
 def select_team(match_id: str, selection: TeamSelection):
-    """Memasukkan pemain ke pertandingan sekaligus memilih tim."""
+    """Join atau pindahkan pemain ke tim yang dikonfigurasi khusus untuk room ini."""
     try:
-        # 1. Periksa pertandingan
-        match_response = (
-            supabase.table("matches")
-            .select("*")
-            .eq("id", match_id)
-            .limit(1)
-            .execute()
-        )
-
-        if not match_response.data:
-            raise HTTPException(status_code=404, detail="Pertandingan tidak ditemukan")
-
-        match = match_response.data[0]
-
-        if match["status"] != "waiting":
-            raise HTTPException(status_code=400, detail="Pertandingan sudah tidak menerima pemain")
-
-        # 2. Periksa pemain
-        player_response = (
-            supabase.table("players")
-            .select("id, player_number, username, full_name, status")
-            .eq("id", selection.player_id)
-            .limit(1)
-            .execute()
-        )
-
-        if not player_response.data:
-            raise HTTPException(status_code=404, detail="Pemain tidak ditemukan")
-
-        # 3. Cari tim berdasarkan kode
-        team_response = (
-            supabase.table("teams")
-            .select("id, team_code, team_name")
-            .eq("team_code", selection.team_code)
-            .limit(1)
-            .execute()
-        )
-
-        if not team_response.data:
-            raise HTTPException(status_code=404, detail="Tim tidak ditemukan")
-
-        team = team_response.data[0]
-
-        # 4. Periksa apakah pemain sudah masuk pertandingan ini
-        existing = (
-            supabase.table("match_players")
-            .select("id")
-            .eq("match_id", match_id)
-            .eq("player_id", selection.player_id)
-            .limit(1)
-            .execute()
-        )
-
-        # 5. Periksa kapasitas jika pemain baru bergabung
-        if not existing.data:
-            members = (
-                supabase.table("match_players")
-                .select("id")
-                .eq("match_id", match_id)
-                .execute()
-            )
-
-            if len(members.data) >= match["max_players"]:
-                raise HTTPException(status_code=400, detail="Lobby sudah penuh")
-
-            # 6. Masukkan pemain ke pertandingan
-            result = (
-                supabase.table("match_players")
-                .insert({
-                    "match_id": match_id,
-                    "player_id": selection.player_id,
-                    "team_id": team["id"],
-                    "player_status": "joined",
-                    "current_health": 100,
-                    "max_health": 100,
-                    "is_eliminated": False,
-                    "is_healing": False
-                })
-                .execute()
-            )
-
-        else:
-            # Pemain sudah bergabung: perbarui pilihan tim
-            result = (
-                supabase.table("match_players")
-                .update({"team_id": team["id"]})
-                .eq("match_id", match_id)
-                .eq("player_id", selection.player_id)
-                .execute()
-            )
-
-        return {
-            "success": True,
-            "message": f"Berhasil bergabung ke {team['team_name']}",
-            "match_id": match_id,
-            "player": player_response.data[0],
-            "team": team,
-            "data": result.data
-        }
-
-    except HTTPException:
-        raise
-
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error))
+        match_res = supabase.table("matches").select("id,status").eq("id", match_id).limit(1).execute()
+        if not match_res.data: raise HTTPException(404, "Pertandingan tidak ditemukan")
+        if match_res.data[0]["status"] != "waiting": raise HTTPException(400, "Pertandingan sudah tidak menerima pemain")
+        player_res = supabase.table("players").select("id,player_number,username,full_name,status").eq("id", selection.player_id).limit(1).execute()
+        if not player_res.data: raise HTTPException(404, "Pemain tidak ditemukan")
+        team_res = supabase.table("teams").select("id,team_code,team_name,team_color").eq("team_code", selection.team_code).limit(1).execute()
+        if not team_res.data: raise HTTPException(404, "Tim tidak ditemukan")
+        team = team_res.data[0]
+        config_res = supabase.table("match_teams").select("capacity").eq("match_id", match_id).eq("team_id", team["id"]).limit(1).execute()
+        if not config_res.data: raise HTTPException(400, "Tim ini tidak tersedia pada room tersebut")
+        capacity = int(config_res.data[0]["capacity"])
+        existing_res = supabase.table("match_players").select("id,team_id").eq("match_id", match_id).eq("player_id", selection.player_id).limit(1).execute()
+        existing = existing_res.data[0] if existing_res.data else None
+        try:
+            supabase.rpc("join_match_team", {"p_match_id":match_id,"p_player_id":selection.player_id,"p_team_code":selection.team_code}).execute()
+        except Exception as join_error:
+            message = str(join_error)
+            if "penuh" in message.lower(): raise HTTPException(400, f"Tim {team['team_name']} sudah penuh")
+            if "tidak tersedia" in message.lower(): raise HTTPException(400, "Tim ini tidak tersedia pada room tersebut")
+            if "tidak menerima pemain" in message.lower(): raise HTTPException(400, "Pertandingan sudah tidak menerima pemain")
+            if "tidak ditemukan" in message.lower(): raise HTTPException(404, "Pertandingan tidak ditemukan")
+            raise
+        result = supabase.table("match_players").select("*").eq("match_id",match_id).eq("player_id",selection.player_id).limit(1).execute()
+        return {"success":True,"message":f"Berhasil bergabung ke {team['team_name']}","match_id":match_id,"player":player_res.data[0],"team":team,"data":result.data}
+    except HTTPException: raise
+    except Exception as error: raise HTTPException(status_code=500, detail=str(error))
 
 # ==========================================
 # LEAVE TEAM API
@@ -206,105 +248,32 @@ def leave_team(match_id: str, data: LeaveTeamRequest):
 
 
 def get_waiting_lobby(match_id: str):
-    """Mengambil daftar pemain berdasarkan tim dalam lobby."""
+    """Menghasilkan semua tim dan anggotanya berdasarkan konfigurasi room."""
     try:
-        # 1. Ambil pertandingan
-        match_response = (
-            supabase.table("matches")
-            .select("*")
-            .eq("id", match_id)
-            .limit(1)
-            .execute()
-        )
-
-        if not match_response.data:
-            raise HTTPException(status_code=404, detail="Pertandingan tidak ditemukan")
-
-        match = match_response.data[0]
-
-        # 2. Ambil seluruh anggota pertandingan
-        members_response = (
-            supabase.table("match_players")
-            .select("*")
-            .eq("match_id", match_id)
-            .execute()
-        )
-
-        members = members_response.data or []
-
-        # 3. Ambil data pemain dan tim
-        player_ids = list(set(item["player_id"] for item in members))
-        team_ids = list(set(item["team_id"] for item in members))
-
-        players = []
-        teams = []
-
-        if player_ids:
-            players = (
-                supabase.table("players")
-                .select("id, player_number, username, full_name, status")
-                .in_("id", player_ids)
-                .execute()
-            ).data or []
-
-        if team_ids:
-            teams = (
-                supabase.table("teams")
-                .select("id, team_code, team_name, team_color")
-                .in_("id", team_ids)
-                .execute()
-            ).data or []
-
-        player_map = {p["id"]: p for p in players}
-        team_map = {t["id"]: t for t in teams}
-
-        red_players = []
-        blue_players = []
-
+        match_res = supabase.table("matches").select("*").eq("id", match_id).limit(1).execute()
+        if not match_res.data: raise HTTPException(404, "Pertandingan tidak ditemukan")
+        match = match_res.data[0]
+        members = supabase.table("match_players").select("*").eq("match_id", match_id).execute().data or []
+        team_config = supabase.table("match_teams").select("team_id,capacity,team_order,teams(id,team_code,team_name,team_color)").eq("match_id", match_id).order("team_order").execute().data or []
+        player_ids = list({m["player_id"] for m in members})
+        players = supabase.table("players").select("id,player_number,username,full_name,status").in_("id", player_ids).execute().data or [] if player_ids else []
+        player_map = {p["id"]:p for p in players}
+        grouped = {row["team_id"]:[] for row in team_config}
         for member in members:
-            player = player_map.get(member["player_id"])
-            team = team_map.get(member["team_id"])
+            team_id = member.get("team_id")
+            player = player_map.get(member.get("player_id"))
+            if team_id in grouped and player:
+                grouped[team_id].append({"player":player,"player_status":member.get("player_status"),"joined_at":member.get("joined_at")})
+        teams = []
+        for row in team_config:
+            team = row.get("teams") or {}
+            entries = grouped.get(row["team_id"], [])
+            teams.append({**team,"capacity":row["capacity"],"total":len(entries),"players":entries})
+        return {"success":True,"match":match,"lobby":{"total_players":len(members),"max_players":sum(t["capacity"] for t in teams),"teams":teams}}
+    except HTTPException: raise
+    except Exception as error: raise HTTPException(status_code=500, detail=str(error))
 
-            if not player or not team:
-                continue
-
-            entry = {
-                "player": player,
-                "player_status": member.get("player_status"),
-                "joined_at": member.get("joined_at")
-            }
-
-            if team["team_code"] == "RED":
-                red_players.append(entry)
-            elif team["team_code"] == "BLUE":
-                blue_players.append(entry)
-
-        return {
-            "success": True,
-            "match": match,
-            "lobby": {
-                "total_players": len(members),
-                "max_players": match["max_players"],
-                "red_team": {
-                    "team_name": "Red Team",
-                    "total": len(red_players),
-                    "players": red_players
-                },
-                "blue_team": {
-                    "team_name": "Blue Team",
-                    "total": len(blue_players),
-                    "players": blue_players
-                }
-            }
-        }
-
-    except HTTPException:
-        raise
-
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error))
-
-    # ==========================================
+# ==========================================
 # ADMIN MATCH CONTROL API
 # ==========================================
 
