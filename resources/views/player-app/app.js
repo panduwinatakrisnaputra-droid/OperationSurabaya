@@ -12,7 +12,8 @@ let player = null;
 let match = null;
 let roomsCache = [];
 let pollHandle = null;
-let accessToken = sessionStorage.getItem('access_token');
+// Keep authentication across page reloads. Migrate tokens from the old sessionStorage key.
+let accessToken = localStorage.getItem('access_token') || sessionStorage.getItem('access_token');
 
 let cameraStream = null;
 let gameplayOpened = false;
@@ -71,10 +72,61 @@ function saveToken(token) {
     accessToken = token || null;
 
     if (accessToken) {
-        sessionStorage.setItem('access_token', accessToken);
-    } else {
+        localStorage.setItem('access_token', accessToken);
         sessionStorage.removeItem('access_token');
+    } else {
+        localStorage.removeItem('access_token');
+        sessionStorage.removeItem('access_token');
+        localStorage.removeItem('player_portal_context');
     }
+}
+
+// Persist the player's current screen and room so a reload restores the same place.
+function persistPortalContext(view = null) {
+    if (!accessToken || !player) return;
+    const context = {
+        player,
+        match: match || null,
+        teamCode: window.currentPlayerTeam || null,
+        view: view || (gameplayOpened ? 'gameplay' : match ? 'lobby' : 'rooms'),
+        savedAt: Date.now()
+    };
+    localStorage.setItem('player_portal_context', JSON.stringify(context));
+}
+
+async function restorePortalSession() {
+    if (!accessToken) return;
+    let context = null;
+    try { context = JSON.parse(localStorage.getItem('player_portal_context') || 'null'); } catch (_) {}
+    if (!context || !context.player || !context.player.id) {
+        saveToken(null);
+        return;
+    }
+
+    player = context.player;
+    match = context.match || null;
+    window.currentPlayerTeam = context.teamCode || null;
+    $('loginPanel').classList.add('hidden');
+    $('teamPanel').classList.add('hidden');
+    $('lobbyPanel').classList.add('hidden');
+    $('gameplayPanel').classList.add('hidden');
+
+    if (match && match.id && context.teamCode) {
+        $('roomPanel').classList.add('hidden');
+        $('lobbyPanel').classList.remove('hidden');
+        $('lobbyWelcome').textContent = `${player.player_number ? `#${player.player_number} · ` : ''}${player.full_name} (@${player.username})`;
+        $('operationStatus').textContent = 'LOBBY';
+        await refreshLobby();
+        if (match && !gameplayOpened) {
+            if (pollHandle) clearInterval(pollHandle);
+            pollHandle = setInterval(refreshLobby, 3000);
+        }
+        return;
+    }
+
+    match = null;
+    window.currentPlayerTeam = null;
+    await continueToTeam(player);
 }
 
 function getPlayer(result) {
@@ -215,6 +267,7 @@ function openGameplay() {
     if (gameplayOpened) return;
 
     gameplayOpened = true;
+    persistPortalContext('gameplay');
 
     if (pollHandle) {
         clearInterval(pollHandle);
@@ -308,6 +361,9 @@ if ($('toggleRegisterPassword')) {
 async function continueToTeam(profile) {
     if (!profile) throw new Error('Profil pemain tidak ditemukan dari respons backend.');
     player = profile;
+    match = null;
+    window.currentPlayerTeam = null;
+    persistPortalContext('rooms');
     $('loginPanel').classList.add('hidden');
     $('teamPanel').classList.add('hidden');
     $('lobbyPanel').classList.add('hidden');
@@ -389,6 +445,7 @@ function renderRooms(rooms) {
 }
 function enterLobby(room, teamCode) {
     match={...room}; window.currentPlayerTeam=teamCode;
+    persistPortalContext('lobby');
     $('lobbyRoomCode').textContent=room.room_code||'ROOM CODE UNAVAILABLE';
     $('assignment').textContent=`${teamCode} TEAM`; $('assignment').className='assignment'; $('assignment').style.borderColor=teamColor(teamCode); $('assignment').style.color=teamColor(teamCode);
     $('lobbyWelcome').textContent=`${player.player_number?`#${player.player_number} · `:''}${player.full_name} (@${player.username})`;
@@ -1468,6 +1525,7 @@ $('leaveTeamBtn').addEventListener('click', async () => {
         // Lepaskan konteks room dan tim sebelumnya.
         match = null;
         window.currentPlayerTeam = null;
+        persistPortalContext('rooms');
 
         $('operationStatus').textContent = 'ROOM BROWSER';
         $('roomWelcome').textContent = `Logged in as ${player.full_name} (@${player.username})`;
@@ -1535,7 +1593,7 @@ function resetPortal(message) {
 
     window.currentPlayerTeam = null;
 
-    saveToken(null);
+    saveToken(null); // Explicit logout clears the persistent session and saved screen.
 
     $('lobbyPanel').classList.add('hidden');
     $('roomPanel').classList.add('hidden');
@@ -1563,6 +1621,21 @@ function resetPortal(message) {
 // ==========================================
 
 showAuth('login');
+
+// Restore the authenticated player and their last screen after a browser refresh.
+(async () => {
+    try {
+        await restorePortalSession();
+    } catch (error) {
+        console.error('Gagal memulihkan sesi Player Portal:', error);
+        if (player) {
+            match = null;
+            window.currentPlayerTeam = null;
+            await continueToTeam(player);
+            setHint('roomListHint', 'Sesi login dipulihkan, tetapi room sebelumnya tidak dapat dimuat. Silakan pilih room kembali.', true);
+        }
+    }
+})();
 
 console.log('OPERATION: SURABAYA Player Portal initialized.');
 
