@@ -9,8 +9,6 @@ TEAM_CATALOG = [
     {"team_code":"BLUE", "team_name":"BLUE", "team_color":"#3B82F6"},
     {"team_code":"GREEN", "team_name":"GREEN", "team_color":"#22C55E"},
     {"team_code":"YELLOW", "team_name":"YELLOW", "team_color":"#EAB308"},
-    {"team_code":"PURPLE", "team_name":"PURPLE", "team_color":"#A855F7"},
-    {"team_code":"ORANGE", "team_name":"ORANGE", "team_color":"#F97316"},
 ]
 
 def _teams_for_match(match_id):

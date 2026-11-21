@@ -1,15 +1,15 @@
 from typing import Optional, List
 from pydantic import BaseModel, Field
 
-TEAM_CODES = ("RED", "BLUE", "GREEN", "YELLOW", "PURPLE", "ORANGE")
+TEAM_CODES = ("RED", "BLUE", "GREEN", "YELLOW")
 
 class TeamCapacityInput(BaseModel):
-    team_code: str = Field(pattern="^(RED|BLUE|GREEN|YELLOW|PURPLE|ORANGE)$")
+    team_code: str = Field(pattern="^(RED|BLUE|GREEN|YELLOW)$")
     capacity: int = Field(ge=1, le=50)
 
 class TeamSelection(BaseModel):
     player_id: str
-    team_code: str = Field(pattern="^(RED|BLUE|GREEN|YELLOW|PURPLE|ORANGE)$")
+    team_code: str = Field(pattern="^(RED|BLUE|GREEN|YELLOW)$")
 
 class LeaveTeamRequest(BaseModel):
     player_id: str
@@ -46,11 +46,11 @@ class WeaponUpgradeScanRequest(BaseModel):
 class CreateRoomRequest(BaseModel):
     match_name: str = Field(min_length=3, max_length=100)
     host_player_id: str
-    team_code: str = Field(default="RED", pattern="^(RED|BLUE|GREEN|YELLOW|PURPLE|ORANGE)$")
-    teams: List[TeamCapacityInput] = Field(min_length=2, max_length=6)
+    team_code: str = Field(default="RED", pattern="^(RED|BLUE|GREEN|YELLOW)$")
+    teams: List[TeamCapacityInput] = Field(min_length=2, max_length=4)
     arena_name: str = Field(min_length=2, max_length=100)
 
 class JoinRoomByCodeRequest(BaseModel):
     room_code: str = Field(min_length=8, max_length=8)
     player_id: str
-    team_code: str = Field(pattern="^(RED|BLUE|GREEN|YELLOW|PURPLE|ORANGE)$")
+    team_code: str = Field(pattern="^(RED|BLUE|GREEN|YELLOW)$")

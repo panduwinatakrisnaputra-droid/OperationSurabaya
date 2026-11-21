@@ -344,8 +344,7 @@ async function loadRooms(search = '') {
 
 const TEAM_CATALOG = [
     { code:'RED', color:'#EF4444' }, { code:'BLUE', color:'#3B82F6' },
-    { code:'GREEN', color:'#22C55E' }, { code:'YELLOW', color:'#EAB308' },
-    { code:'PURPLE', color:'#A855F7' }, { code:'ORANGE', color:'#F97316' }
+    { code:'GREEN', color:'#22C55E' }, { code:'YELLOW', color:'#EAB308' }
 ];
 let createTeamCount = 2;
 function teamColor(code) { return TEAM_CATALOG.find(t => t.code === code)?.color || '#64748B'; }
@@ -1306,7 +1305,7 @@ async function finishBaseShutdown(payload){
 async function processBaseShutdownPayload(payload){
   if(!player||!match||baseShutdownBusy)return;const clean=String(payload||'').trim();
   if(!clean.startsWith('OPS-BASE-SHUTDOWN:')){setBaseShutdownStatus('QR bukan QR Base Shutdown.',true);return;}
-  const code=clean.slice('OPS-BASE-SHUTDOWN:'.length).trim();if(!/^BASE-(RED|BLUE|GREEN|YELLOW|PURPLE|ORANGE)$/.test(code)){setBaseShutdownStatus('Kode base tidak valid.',true);return;}
+  const code=clean.slice('OPS-BASE-SHUTDOWN:'.length).trim();if(!/^BASE-(RED|BLUE|GREEN|YELLOW)$/.test(code)){setBaseShutdownStatus('Kode base tidak valid.',true);return;}
   // Backend performs the authoritative team/match validation after the countdown.
   if(baseShutdownScanner){const sc=baseShutdownScanner;baseShutdownScanner=null;try{await sc.stop();}catch(_){}try{sc.clear();}catch(_){}}
   await finishBaseShutdown(clean);
