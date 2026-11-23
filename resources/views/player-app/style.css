@@ -1164,3 +1164,31 @@
   .gameplay-panel .gameplay-controls { bottom: 10px; }
   .gameplay-panel .camera-overlay { top: 62px; }
 }
+
+/* ===== FIX: modal scanner QR tidak boleh melebihi layar ===== */
+.weapon-qr-modal {
+  align-items: flex-start;          /* jangan center: bagian atas tidak bisa di-scroll bila konten lebih tinggi */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.weapon-qr-dialog {
+  margin: auto;                     /* tetap center bila muat, aman bila tidak muat */
+  max-width: 520px;
+}
+/* Scanner persegi: lebarnya dibatasi tinggi layar agar videonya (rasio 1:1) selalu muat */
+.weapon-qr-modal [id$="Reader"] {
+  min-height: 0;
+  width: min(100%, 52vh);
+  margin-left: auto;
+  margin-right: auto;
+}
+.weapon-qr-modal [id$="Reader"] video { display: block; }
+@media (max-height: 560px) {
+  .weapon-qr-modal { padding: 8px; }
+  .weapon-qr-dialog { padding: 12px 16px; }
+  .weapon-qr-head h2 { font-size: 20px; margin-top: 2px; }
+  .weapon-qr-help { margin: 8px 0; font-size: 11px; }
+  .weapon-qr-divider { margin: 10px 0; }
+  .weapon-qr-modal [id$="Reader"] { width: min(100%, 46vh); }
+}
