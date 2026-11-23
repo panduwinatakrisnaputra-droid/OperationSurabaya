@@ -5,6 +5,7 @@ from app.Models.match import (
     HealthUpdate,
     PlayerHealRequest,
     PlayerShootRequest,
+    GunDetectRequest,
     BaseShutdownRequest,
     GhostModeScanRequest,
     WeaponUpgradeScanRequest,
@@ -58,6 +59,10 @@ def update_player_health(match_id: str, data: HealthUpdate):
 @router.post("/{match_id}/heal")
 async def heal_player(match_id: str, data: PlayerHealRequest):
     return await gameplay_controller.heal_player(match_id, data)
+
+@router.post("/{match_id}/detect-gun")
+def detect_gun(match_id: str, data: GunDetectRequest):
+    return gameplay_controller.detect_gun(match_id, data)
 
 @router.post("/{match_id}/shoot")
 def shoot_player(match_id: str, data: PlayerShootRequest):

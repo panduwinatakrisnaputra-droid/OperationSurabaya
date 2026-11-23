@@ -26,6 +26,11 @@ class PlayerHealRequest(BaseModel):
 
 class PlayerShootRequest(BaseModel):
     player_id: str = Field(min_length=1)
+    target_player_id: Optional[str] = None
+    image: Optional[str] = Field(default=None, max_length=3_000_000)
+
+class GunDetectRequest(BaseModel):
+    image: str = Field(min_length=1, max_length=3_000_000)
 
 class BaseShutdownRequest(BaseModel):
     player_id: str = Field(min_length=1)
