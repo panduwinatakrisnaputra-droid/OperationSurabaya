@@ -1460,6 +1460,18 @@ async function scanBaseShutdownImage(file){if(!file||typeof Html5Qrcode==='undef
 // GAMEPLAY CAMERA CONTROLS
 // ==========================================
 
+$('fullscreenBtn')?.addEventListener('click', () => {
+    try {
+        if (document.fullscreenElement) {
+            document.exitFullscreen();
+        } else {
+            document.documentElement.requestFullscreen?.();
+        }
+    } catch (error) {
+        console.warn('Fullscreen tidak didukung:', error);
+    }
+});
+
 $('enableCameraBtn').addEventListener(
     'click',
     startGameplayCamera
@@ -1479,6 +1491,11 @@ function setGameActionsDropdown(open) {
   gameActionsDropdown.classList.toggle('is-open', open);
   gameActionsMenu.classList.toggle('hidden', !open);
   gameActionsToggle.setAttribute('aria-expanded', String(open));
+  if (open) {
+    // batasi tinggi menu agar tidak keluar layar; sisanya bisa di-scroll
+    const top = gameActionsToggle.getBoundingClientRect().bottom + 6;
+    gameActionsMenu.style.maxHeight = `${Math.max(120, window.innerHeight - top - 12)}px`;
+  }
 }
 gameActionsToggle?.addEventListener('click', (event) => {
   event.stopPropagation();
