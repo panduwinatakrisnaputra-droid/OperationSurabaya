@@ -155,6 +155,7 @@ function setHint(id, message, isError = false) {
 // ==========================================
 
 function stopGameplayCamera() {
+    stopGunDetection();
     if (cameraStream) {
         cameraStream.getTracks().forEach(track => track.stop());
         cameraStream = null;
@@ -214,6 +215,8 @@ async function startGameplayCamera() {
         if (placeholder) {
             placeholder.classList.add('hidden');
         }
+
+        startGunDetection();
 
         if (status) {
             status.textContent = 'CAMERA CONNECTED';
@@ -795,6 +798,7 @@ async function refreshGameplayHealth() {
             return;
         }
 
+        updateTargetOptions(result.players || [], health.team_code);
         renderGhostMode(health.ghost_mode_until);
 
         const hp = Number(health.current_health);
@@ -1196,6 +1200,120 @@ window.addEventListener('ops-healing-pose-valid', handleHealingPoseSignal);
 // GAMEPLAY SHOOT ACTION
 // ==========================================
 
+
+// ==========================================
+// GUN DETECTION (YOLO di backend)
+// ==========================================
+let gunDetectTimer = null;
+let gunDetectBusy = false;
+let gunLocked = false;
+
+function captureGameplayFrame() {
+    const video = $('gameplayCamera');
+    if (!video || !video.videoWidth || !video.videoHeight) return null;
+    const width = 416;
+    const height = Math.round(width * video.videoHeight / video.videoWidth);
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext('2d').drawImage(video, 0, 0, width, height);
+    return canvas.toDataURL('image/jpeg', 0.7);
+}
+
+function updateTargetOptions(players, ownTeamCode) {
+    const select = $('targetSelect');
+    if (!select || !ownTeamCode) return;
+    const enemies = players.filter(p => p.team_code !== ownTeamCode && !p.is_eliminated);
+    const signature = enemies.map(p => p.player_id).join(',');
+    if (select.dataset.signature === signature) return;
+    const previous = select.value;
+    select.dataset.signature = signature;
+    select.textContent = '';
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = 'TARGET: -';
+    select.append(empty);
+    enemies.forEach(p => {
+        const option = document.createElement('option');
+        option.value = p.player_id;
+        option.textContent = `${p.team_code} · ${p.full_name || p.username}`;
+        select.append(option);
+    });
+    if (enemies.some(p => p.player_id === previous)) select.value = previous;
+}
+
+function placeGunBox(box) {
+    const video = $('gameplayCamera');
+    const el = $('gunBox');
+    if (!video || !el || !video.videoWidth) return;
+    const stage = video.parentElement.getBoundingClientRect();
+    const rect = video.getBoundingClientRect();
+    // object-fit: cover -> hitung area video yang benar-benar terlihat
+    const scale = Math.max(rect.width / video.videoWidth, rect.height / video.videoHeight);
+    const shownW = video.videoWidth * scale;
+    const shownH = video.videoHeight * scale;
+    const offsetX = rect.left - stage.left + (rect.width - shownW) / 2;
+    const offsetY = rect.top - stage.top + (rect.height - shownH) / 2;
+    el.style.left = `${offsetX + box.x * shownW}px`;
+    el.style.top = `${offsetY + box.y * shownH}px`;
+    el.style.width = `${box.w * shownW}px`;
+    el.style.height = `${box.h * shownH}px`;
+}
+
+// detected = pistol terlihat; onTarget = crosshair (tengah layar) berada di dalam bounding box
+function setGunLocked(detected, result) {
+    const onTarget = !!(detected && result?.on_target);
+    gunLocked = onTarget;
+    const status = $('gunStatus');
+    const boxEl = $('gunBox');
+    const shoot = $('shootBtn');
+    const crosshair = $('crosshair');
+    if (status) {
+        status.textContent = onTarget
+            ? `ON TARGET ${Math.round((result?.confidence || 0) * 100)}%`
+            : detected ? 'ENEMY IN SIGHT - AIM' : 'SCANNING...';
+        status.classList.toggle('locked', onTarget);
+    }
+    if (boxEl) {
+        boxEl.classList.toggle('hidden', !detected);
+        if (detected && result?.box) placeGunBox(result.box);
+    }
+    if (crosshair) crosshair.classList.toggle('on-target', onTarget);
+    if (shoot) shoot.classList.toggle('no-target', !onTarget);
+}
+
+async function gunDetectTick() {
+    if (gunDetectBusy || !match || !gameplayOpened || playerEliminated || document.hidden) return;
+    const image = captureGameplayFrame();
+    if (!image) return;
+    gunDetectBusy = true;
+    try {
+        const result = await api(`/api/matches/${match.id}/detect-gun`, {
+            method: 'POST',
+            body: JSON.stringify({ image })
+        });
+        setGunLocked(!!result.detected, result);
+    } catch (error) {
+        setGunLocked(false);
+        const status = $('gunStatus');
+        if (status) status.textContent = 'DETECTOR OFFLINE';
+    } finally {
+        gunDetectBusy = false;
+    }
+}
+
+function startGunDetection() {
+    stopGunDetection();
+    gunDetectTimer = setInterval(gunDetectTick, 400);
+}
+
+function stopGunDetection() {
+    if (gunDetectTimer) clearInterval(gunDetectTimer);
+    gunDetectTimer = null;
+    gunDetectBusy = false;
+    setGunLocked(false);
+}
+
 async function sendShootEvent() {
     const button = $('shootBtn');
 
@@ -1209,6 +1327,21 @@ async function sendShootEvent() {
     ) {
         return;
     }
+
+    const targetId = $('targetSelect')?.value || '';
+    if (!gunLocked || !targetId) {
+        const label = button.querySelector('.shoot-label');
+        if (label) {
+            label.textContent = !targetId ? 'PICK TARGET' : 'AIM AT GUN';
+            setTimeout(() => {
+                if (!shootCooldown && !playerEliminated) label.textContent = 'FIRE';
+            }, 800);
+        }
+        return;
+    }
+
+    const frameImage = captureGameplayFrame();
+    if (!frameImage) return;
 
     shootCooldown = true;
     button.disabled = true;
@@ -1226,7 +1359,9 @@ async function sendShootEvent() {
             {
                 method: 'POST',
                 body: JSON.stringify({
-                    player_id: player.id
+                    player_id: player.id,
+                    target_player_id: targetId,
+                    image: frameImage
                 })
             }
         );
@@ -1234,14 +1369,17 @@ async function sendShootEvent() {
         console.log('Shoot berhasil:', result);
 
         if (shootLabel) {
-            shootLabel.textContent = `SHOT · ${result.weapon_damage ?? 10} DMG`;
+            shootLabel.textContent = result.blocked_by_ghost_mode
+                ? 'GHOST · 0 DMG'
+                : `HIT · ${result.damage_applied ?? result.weapon_damage ?? 10} DMG`;
         }
 
     } catch (error) {
         console.error('Shoot gagal:', error);
 
         if (shootLabel) {
-            shootLabel.textContent = 'FAILED';
+            shootLabel.textContent = (error && error.message ? String(error.message) : 'FAILED')
+                .slice(0, 24).toUpperCase();
         }
 
         // Tampilkan pesan error di Console
@@ -1379,6 +1517,18 @@ async function scanBaseShutdownImage(file){if(!file||typeof Html5Qrcode==='undef
 // GAMEPLAY CAMERA CONTROLS
 // ==========================================
 
+$('fullscreenBtn')?.addEventListener('click', () => {
+    try {
+        if (document.fullscreenElement) {
+            document.exitFullscreen();
+        } else {
+            document.documentElement.requestFullscreen?.();
+        }
+    } catch (error) {
+        console.warn('Fullscreen tidak didukung:', error);
+    }
+});
+
 $('enableCameraBtn').addEventListener(
     'click',
     startGameplayCamera
@@ -1398,6 +1548,11 @@ function setGameActionsDropdown(open) {
   gameActionsDropdown.classList.toggle('is-open', open);
   gameActionsMenu.classList.toggle('hidden', !open);
   gameActionsToggle.setAttribute('aria-expanded', String(open));
+  if (open) {
+    // batasi tinggi menu agar tidak keluar layar; sisanya bisa di-scroll
+    const top = gameActionsToggle.getBoundingClientRect().bottom + 6;
+    gameActionsMenu.style.maxHeight = `${Math.max(120, window.innerHeight - top - 12)}px`;
+  }
 }
 gameActionsToggle?.addEventListener('click', (event) => {
   event.stopPropagation();

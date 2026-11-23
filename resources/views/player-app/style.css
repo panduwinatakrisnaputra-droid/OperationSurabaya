@@ -944,3 +944,251 @@
 .lobby-team-head h3{color:var(--team-color,#fff)!important}
 .room-team-capacity{display:flex;flex-wrap:wrap;gap:8px}
 .room-team-capacity span{font-size:11px;padding:5px 8px;border:1px solid var(--line);border-left:3px solid var(--team-color)}
+
+/* ===== GUN DETECTION ===== */
+.gun-box {
+    position: absolute;
+    z-index: 6;
+    border: 2px solid #ff3b46;
+    box-shadow: 0 0 14px #ff3b4688, inset 0 0 10px #ff3b4655;
+    pointer-events: none;
+}
+.gun-box.hidden { display: none; }
+.gun-box span {
+    position: absolute;
+    left: -2px;
+    top: -20px;
+    padding: 2px 6px;
+    background: #ff3b46;
+    color: #fff;
+    font: 700 10px 'DM Mono', monospace;
+    letter-spacing: 1px;
+    white-space: nowrap;
+}
+.target-picker {
+    position: absolute;
+    z-index: 8;
+    right: 12px;
+    top: 44px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 180px;
+    font: 9px 'DM Mono', monospace;
+    color: var(--muted);
+}
+.target-picker select {
+    background: #0b1119e6;
+    color: var(--lime);
+    border: 1px solid var(--lime);
+    padding: 5px 6px;
+    font: 11px 'DM Mono', monospace;
+}
+.gun-status { text-align: right; color: var(--muted); }
+.gun-status.locked { color: #ff3b46; font-weight: 700; }
+.shoot-button.no-target { opacity: .55; filter: grayscale(.6); }
+
+/* ===== CROSSHAIR ===== */
+.crosshair {
+    position: absolute;
+    z-index: 7;
+    left: 50%;
+    top: 50%;
+    width: 64px;
+    height: 64px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    --ch: var(--lime, #c6ff3d);
+    filter: drop-shadow(0 0 4px #000a);
+}
+.crosshair i {
+    position: absolute;
+    background: var(--ch);
+    transition: background .1s;
+}
+.crosshair i:nth-child(1) { left: 50%; top: 0; width: 2px; height: 22px; margin-left: -1px; }
+.crosshair i:nth-child(2) { left: 50%; bottom: 0; width: 2px; height: 22px; margin-left: -1px; }
+.crosshair i:nth-child(3) { top: 50%; left: 0; height: 2px; width: 22px; margin-top: -1px; }
+.crosshair i:nth-child(4) { top: 50%; right: 0; height: 2px; width: 22px; margin-top: -1px; }
+.crosshair b {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 4px;
+    height: 4px;
+    margin: -2px 0 0 -2px;
+    border-radius: 50%;
+    background: var(--ch);
+}
+.crosshair.on-target { --ch: #ff3b46; animation: crosshair-lock .45s ease-in-out infinite alternate; }
+@keyframes crosshair-lock { from { transform: translate(-50%, -50%) scale(1); } to { transform: translate(-50%, -50%) scale(1.18); } }
+
+/* ===== FULLSCREEN CAMERA LAYOUT =====
+   Kamera memenuhi seluruh layar; semua HUD melayang di atasnya. */
+.gameplay-panel { background: #000; overflow: hidden; }
+
+.gameplay-panel .camera-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+.gameplay-panel #gameplayCamera {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  aspect-ratio: auto;
+  object-fit: cover;
+  object-position: center;
+  background: #000;
+}
+/* vignette tipis supaya HUD tetap terbaca di atas video terang */
+.gameplay-panel .camera-stage::before,
+.gameplay-panel .camera-stage::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0;
+  height: 110px;
+  z-index: 2;
+  pointer-events: none;
+}
+.gameplay-panel .camera-stage::before { top: 0; background: linear-gradient(rgba(3,6,10,.78), transparent); }
+.gameplay-panel .camera-stage::after { bottom: 0; background: linear-gradient(transparent, rgba(3,6,10,.78)); }
+.gameplay-panel .camera-placeholder { z-index: 3; }
+
+/* Top bar & footer menjadi overlay transparan */
+.gameplay-panel .gameplay-topbar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 20;
+  min-height: 0;
+  padding: 10px 16px;
+  background: transparent;
+  border: 0;
+  pointer-events: none;
+}
+.gameplay-panel .gameplay-topbar > * { pointer-events: auto; }
+.gameplay-panel .gameplay-topbar strong { font-size: 17px; text-shadow: 0 1px 6px #000; }
+.gameplay-panel .gameplay-topbar small { text-shadow: 0 1px 4px #000; }
+.gameplay-panel .match-timer-card {
+  min-width: 0;
+  padding: 6px 12px;
+  background: rgba(5, 10, 15, .45);
+  backdrop-filter: blur(3px);
+}
+.gameplay-panel .match-timer-card strong { font-size: 22px; }
+.gameplay-panel .match-timer-card small,
+.gameplay-panel .match-timer-card span { font-size: 7px; }
+
+.gameplay-panel .gameplay-footer {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  z-index: 20;
+  min-height: 0;
+  height: 44px;
+  padding: 0 16px;
+  background: transparent;
+  border: 0;
+  text-shadow: 0 1px 4px #000;
+}
+.gameplay-panel .gameplay-footer .camera-logout {
+  padding: 6px 12px;
+  background: rgba(5, 10, 15, .5);
+  backdrop-filter: blur(3px);
+}
+
+/* Baris status kamera di bawah top bar */
+.gameplay-panel .camera-overlay { top: 66px; left: 12px; right: 12px; z-index: 12; }
+.gameplay-panel .camera-overlay .camera-live,
+.gameplay-panel .camera-overlay .team-badge { background: rgba(5, 10, 15, .5); backdrop-filter: blur(3px); }
+.fullscreen-btn {
+  pointer-events: auto;
+  margin-left: 8px;
+  padding: 7px 10px;
+  background: rgba(5, 10, 15, .5);
+  border: 1px solid #ffffff30;
+  color: #fff;
+  font: 11px 'DM Mono', monospace;
+  cursor: pointer;
+}
+.fullscreen-btn:hover { border-color: var(--lime); color: var(--lime); }
+
+/* Panel kiri, target, HUD senjata, tombol tembak */
+.gameplay-panel .gameplay-left-panel { top: 108px; left: 12px; }
+.gameplay-panel .target-picker { top: 108px; right: 12px; }
+.gameplay-panel .weapon-hud { left: 12px; bottom: 52px; }
+.gameplay-panel .gameplay-controls { right: 22px; bottom: 56px; }
+.gameplay-panel .shoot-button { width: 84px; height: 84px; }
+
+@media (max-width: 700px) {
+  .gameplay-panel .gameplay-topbar { padding: 8px 10px; }
+  .gameplay-panel .gameplay-topbar strong { font-size: 14px; }
+  .gameplay-panel .match-timer-card strong { font-size: 16px; }
+  .gameplay-panel .camera-overlay { top: 58px; left: 8px; right: 8px; }
+  .gameplay-panel .gameplay-left-panel { top: 96px; left: 8px; }
+  .gameplay-panel .target-picker { top: 96px; right: 8px; max-width: 150px; }
+  .gameplay-panel .weapon-hud { left: 8px; bottom: 48px; max-width: calc(100% - 110px); }
+  .gameplay-panel .gameplay-controls { right: 12px; bottom: 52px; }
+  .gameplay-panel .shoot-button { width: 70px; height: 70px; }
+}
+/* HP rendah di landscape pendek: rapatkan HUD */
+@media (max-height: 460px) {
+  .gameplay-panel .gameplay-left-panel { top: 92px; }
+  .gameplay-panel .target-picker { top: 92px; }
+  .gameplay-panel .weapon-hud { bottom: 46px; }
+  .gameplay-panel .gameplay-controls { bottom: 48px; }
+}
+
+/* ===== FIX: FIRE di pojok kanan bawah + menu Game Actions bisa di-scroll ===== */
+.gameplay-panel .gameplay-controls { right: 14px; bottom: 14px; }
+.gameplay-panel .gameplay-footer { z-index: 18; }
+.gameplay-panel .gameplay-action-menu {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--lime) transparent;
+}
+.gameplay-panel .gameplay-action-stack { gap: 5px; }
+.gameplay-panel .gameplay-action-stack button { min-height: 34px; padding: 6px 10px; }
+.gameplay-panel .match-timer-card span { display: none; }
+@media (max-width: 700px) {
+  .gameplay-panel .gameplay-controls { right: 10px; bottom: 10px; }
+}
+@media (max-height: 460px) {
+  .gameplay-panel .gameplay-controls { bottom: 10px; }
+  .gameplay-panel .camera-overlay { top: 62px; }
+}
+
+/* ===== FIX: modal scanner QR tidak boleh melebihi layar ===== */
+.weapon-qr-modal {
+  align-items: flex-start;          /* jangan center: bagian atas tidak bisa di-scroll bila konten lebih tinggi */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.weapon-qr-dialog {
+  margin: auto;                     /* tetap center bila muat, aman bila tidak muat */
+  max-width: 520px;
+}
+/* Scanner persegi: lebarnya dibatasi tinggi layar agar videonya (rasio 1:1) selalu muat */
+.weapon-qr-modal [id$="Reader"] {
+  min-height: 0;
+  width: min(100%, 52vh);
+  margin-left: auto;
+  margin-right: auto;
+}
+.weapon-qr-modal [id$="Reader"] video { display: block; }
+@media (max-height: 560px) {
+  .weapon-qr-modal { padding: 8px; }
+  .weapon-qr-dialog { padding: 12px 16px; }
+  .weapon-qr-head h2 { font-size: 20px; margin-top: 2px; }
+  .weapon-qr-help { margin: 8px 0; font-size: 11px; }
+  .weapon-qr-divider { margin: 10px 0; }
+  .weapon-qr-modal [id$="Reader"] { width: min(100%, 46vh); }
+}

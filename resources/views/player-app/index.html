@@ -318,6 +318,9 @@
 
       <div class="camera-stage">
         <video id="gameplayCamera" autoplay playsinline muted></video>
+        <div id="crosshair" class="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i><b></b></div>
+        <div id="gunBox" class="gun-box hidden"><span id="gunBoxLabel">ENEMY</span></div>
+        <div class="target-picker"><span id="gunStatus" class="gun-status">SCANNING...</span><select id="targetSelect" aria-label="Pilih target musuh"><option value="">TARGET: -</option></select></div>
         <div id="cameraPlaceholder" class="camera-placeholder">
           <div class="camera-symbol">◉</div>
           <strong>KAMERA BELUM AKTIF</strong>
@@ -326,7 +329,7 @@
         </div>
         <div class="camera-overlay">
           <span class="camera-live"><i></i> LIVE CAMERA</span>
-          <span id="gameplayTeamBadge" class="team-badge">TEAM</span>
+          <span style="display:inline-flex;align-items:center"><span id="gameplayTeamBadge" class="team-badge">TEAM</span><button type="button" id="fullscreenBtn" class="fullscreen-btn" aria-label="Layar penuh">&#x26F6;</button></span>
         </div>
         <!-- PLAYER HEALTH + ACTION PANEL -->
         <div class="gameplay-left-panel">
