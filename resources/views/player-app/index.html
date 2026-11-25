@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -73,7 +72,7 @@
             <div class="camera-perm-icon">📷</div>
             <p>Izin kamera diperlukan untuk Face Recognition.</p>
             <button type="button" class="btn primary" id="requestCameraBtn">
-              IZINKAN & AKTIFKAN KAMERA
+              IZINKAN &amp; AKTIFKAN KAMERA
             </button>
           </div>
 
@@ -92,7 +91,7 @@
             </div>
 
             <button class="btn primary" id="faceLoginBtn">
-              SCAN WAJAH & MASUK <b>↗</b>
+              SCAN WAJAH &amp; MASUK <b>↗</b>
             </button>
 
             <p class="hint" id="loginHint">
@@ -146,7 +145,7 @@
             </div>
 
             <button class="btn primary" id="registerBtn">
-              DAFTARKAN WAJAH & AKUN <b>↗</b>
+              DAFTARKAN WAJAH &amp; AKUN <b>↗</b>
             </button>
 
             <p class="hint" id="registerHint">
@@ -277,21 +276,18 @@
       </div>
 
       <div class="lobby-teams" id="lobbyTeams"></div>
-    </div>
 
-</div>
       <p class="hint" id="lobbyHint"></p>
 
       <div class="lobby-bottom">
-  <span>PLAYER STATUS <b>CONNECTED</b></span>
+        <span>PLAYER STATUS <b>CONNECTED</b></span>
 
-      <div class="lobby-actions">
-        <button class="btn outline" id="leaveTeamBtn">LEAVE TEAM</button>
-        <button class="btn outline" id="leaveBtn">LOG OUT</button>
+        <div class="lobby-actions">
+          <button class="btn outline" id="leaveTeamBtn">LEAVE TEAM</button>
+          <button class="btn outline" id="leaveBtn">LOG OUT</button>
+        </div>
       </div>
-    </div>
     </section>
-
 
     <!-- GAMEPLAY CAMERA -->
     <section id="gameplayPanel" class="gameplay-panel hidden">
@@ -364,20 +360,20 @@
 
       <!-- PLAYER ELIMINATED OVERLAY -->
       <div id="eliminatedOverlay" class="eliminated-overlay hidden">
-          <div class="eliminated-content">
-              <span class="eliminated-tag">OPERATION TERMINATED</span>
-              <h1>YOU ARE ELIMINATED</h1>
-              <p>YOUR HEALTH HAS REACHED ZERO</p>
-              <div class="eliminated-line"></div>
-              <span class="eliminated-status">PLAYER STATUS: ELIMINATED</span>
-          </div>
+        <div class="eliminated-content">
+          <span class="eliminated-tag">OPERATION TERMINATED</span>
+          <h1>YOU ARE ELIMINATED</h1>
+          <p>YOUR HEALTH HAS REACHED ZERO</p>
+          <div class="eliminated-line"></div>
+          <span class="eliminated-status">PLAYER STATUS: ELIMINATED</span>
+        </div>
       </div>
-      
+
       <div class="gameplay-controls">
-          <button type="button" id="shootBtn" class="shoot-button">
-              <span class="shoot-icon">◎</span>
-              <span class="shoot-label">FIRE</span>
-          </button>
+        <button type="button" id="shootBtn" class="shoot-button">
+          <span class="shoot-icon">◎</span>
+          <span class="shoot-label">FIRE</span>
+        </button>
       </div>
       <div class="gameplay-footer">
         <span>OPERATION STATUS <b id="gameplayStatus">ACTIVE</b></span>
@@ -401,7 +397,6 @@
         <button type="button" id="cancelWeaponQrBtn" class="weapon-qr-cancel">BATALKAN</button>
       </div>
     </div>
-
 
     <!-- BASE HEALING QR + POSE MENU -->
     <div id="healingQrModal" class="weapon-qr-modal hidden" role="dialog" aria-modal="true" aria-labelledby="healingQrTitle">
@@ -459,6 +454,46 @@
       </div>
     </div>
 
+    <!-- TACTICAL COMMS / SQUAD AI RADIO (OTOMATIS MUNCUL SAAT ROOM & TIM DIPILIH) -->
+    <section id="commsPlayerPanel" class="panel hidden" style="margin-top:18px;">
+      <div class="section-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+        <div>
+          <p class="eyebrow">TACTICAL COMMS / SQUAD AI RADIO</p>
+          <h2>Team AI Speech-to-Text</h2>
+        </div>
+        <div class="comms-header-actions">
+          <span id="commsPlayerSquadCapacity" style="font:700 11px 'DM Mono',monospace;color:#c7f36b;border:1px solid rgba(199,243,107,0.35);padding:4px 10px;background:rgba(10,16,23,0.8);">ANGGOTA: 0/0</span>
+          <button type="button" id="commsPlayerToggleBtn" class="comms-toggle-btn" title="Sembunyikan/Tampilkan panel chat">MINIMIZE</button>
+        </div>
+      </div>
+
+      <div class="comms-collapsible-body">
+        <p class="hint" id="commsPlayerStatus">Menyinkronkan saluran radio tim...</p>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 12px;border:1px solid rgba(199,243,107,0.35);background:rgba(10,16,23,0.8);margin-top:10px;margin-bottom:10px;">
+          <div>
+            <strong id="commsPlayerTeamTag" style="font-size:14px;letter-spacing:1px;display:block;">ROOM · TIM</strong>
+            <small style="opacity:0.75;font-size:11px;">🔊 Siaran suara Command Center selalu aktif (tidak dapat di-mute)</small>
+          </div>
+          <button type="button" class="btn primary" id="commsPlayerSttBtn">🤖🎙️ MULAI AI SPEECH-TO-TEXT</button>
+        </div>
+
+        <!-- RINGKASAN JUMLAH ANGGOTA PER TIM DI ROOM -->
+        <div id="commsPlayerAllTeamsBar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>
+
+        <!-- DAFTAR ANGGOTA TIM AKTIF -->
+        <div id="commsPlayerRoster" style="margin-bottom:8px;"></div>
+        <p id="commsPlayerSttPreview" class="hint" style="min-height:18px;color:#c7f36b;margin-bottom:6px;"></p>
+
+        <div id="commsPlayerChatBox" style="height:190px;overflow-y:auto;border:1px solid rgba(255,255,255,0.12);background:rgba(10,16,23,0.8);padding:8px;margin-bottom:8px;"></div>
+
+        <div style="display:flex;gap:8px;">
+          <input id="commsPlayerChatInput" maxlength="1000" placeholder="Atau ketik pesan teks ke tim..." style="flex:1;">
+          <button type="button" class="btn primary" id="commsPlayerSendBtn">KIRIM <b>↗</b></button>
+        </div>
+      </div>
+    </section>
+
     <footer>
       <span>FIELD OPS © 2026</span>
       <span>PLAYER PORTAL · BUILD 0.3</span>
@@ -468,5 +503,8 @@
   <script src="vendor/face-api.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'"></script>
   <script src="app.js"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+  <script src="comms-player.js"></script>
 </body>
 </html>

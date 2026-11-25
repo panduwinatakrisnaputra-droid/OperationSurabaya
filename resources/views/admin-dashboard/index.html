@@ -1,328 +1,372 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OPERATION: SURABAYA — Command Center</title>
-    <link rel="stylesheet" href="style.css?v=4">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
-    <style>
-        /* Map Container & Dark Tactical Tile Theme */
-        .map-wrapper {
-            position: relative;
-            border: 1px solid var(--line);
-            background: #0a1017;
-            overflow: hidden;
-        }
-        #tacticalMap {
-            width: 100%;
-            height: 275px;
-            background: #0a1017;
-            z-index: 1;
-        }
-        .leaflet-tile-pane {
-            filter: invert(100%) hue-rotate(180deg) brightness(92%) contrast(95%);
-        }
-        .leaflet-control-attribution {
-            background: rgba(10, 16, 23, 0.8) !important;
-            color: var(--muted) !important;
-            font-size: 9px !important;
-        }
-        .leaflet-control-attribution a {
-            color: var(--lime) !important;
-        }
-        .leaflet-popup-content-wrapper,
-        .leaflet-popup-tip {
-            background: #0d151e !important;
-            color: #e6edf3 !important;
-            border: 1px solid var(--line);
-            border-radius: 2px !important;
-            font-family: 'DM Mono', monospace;
-            font-size: 11px;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OPERATION: SURABAYA — Command Center</title>
+  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <style>
+    .hidden { display: none !important; }
 
-        /* Player & Base Dots */
-        .player-dot-marker {
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            border: 2px solid #ffffff;
-            box-shadow: 0 0 10px currentColor;
-            transition: transform 0.2s ease;
-        }
-        .player-dot-marker.red {
-            background: #ff4d4d;
-            color: #ff4d4d;
-        }
-        .player-dot-marker.blue {
-            background: #3b9eff;
-            color: #3b9eff;
-        }
-        .player-dot-marker.eliminated {
-            background: #5c6773;
-            color: #5c6773;
-            opacity: 0.65;
-        }
-        .player-dot-marker.ghost {
-            box-shadow: 0 0 0 4px rgba(240, 184, 75, 0.45), 0 0 12px #f0b84b;
-            border-color: #f0b84b;
-        }
-        .player-map-label {
-            background: rgba(10, 16, 23, 0.88) !important;
-            border: 1px solid var(--line) !important;
-            color: #e6edf3 !important;
-            font: 700 9px 'DM Mono', monospace !important;
-            padding: 1px 5px !important;
-            box-shadow: none !important;
-        }
-        .player-map-label::before {
-            display: none !important;
-        }
-        .base-square-marker {
-            width: 18px;
-            height: 18px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font: 700 10px 'DM Mono', monospace;
-            color: #fff;
-            border: 1px solid #fff;
-        }
-        .base-square-marker.red { background: rgba(235, 77, 75, 0.9); }
-        .base-square-marker.blue { background: rgba(52, 152, 219, 0.9); }
+    /* Map Container & Dark Tactical Tile Theme */
+    .map-wrapper {
+      position: relative;
+      border: 1px solid var(--line);
+      background: #0a1017;
+      overflow: hidden;
+    }
+    #tacticalMap {
+      width: 100%;
+      height: 275px;
+      background: #0a1017;
+      z-index: 1;
+    }
+    .leaflet-tile-pane {
+      filter: invert(100%) hue-rotate(180deg) brightness(92%) contrast(95%);
+    }
+    .leaflet-control-attribution {
+      background: rgba(10, 16, 23, 0.8) !important;
+      color: var(--muted) !important;
+      font-size: 9px !important;
+    }
+    .leaflet-control-attribution a {
+      color: var(--lime) !important;
+    }
+    .leaflet-popup-content-wrapper,
+    .leaflet-popup-tip {
+      background: #0d151e !important;
+      color: #e6edf3 !important;
+      border: 1px solid var(--line);
+      border-radius: 2px !important;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+    }
 
-        .map-head-actions {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .btn-mini {
-            background: #111a24;
-            color: var(--lime);
-            border: 1px solid var(--line);
-            padding: 3px 8px;
-            font: 700 10px 'DM Mono', monospace;
-            cursor: pointer;
-        }
-        .btn-mini:hover {
-            border-color: var(--lime);
-        }
+    /* Player & Base Dots */
+    .player-dot-marker {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 2px solid #ffffff;
+      box-shadow: 0 0 10px currentColor;
+      transition: transform 0.2s ease;
+    }
+    .player-dot-marker.red {
+      background: #ff4d4d;
+      color: #ff4d4d;
+    }
+    .player-dot-marker.blue {
+      background: #3b9eff;
+      color: #3b9eff;
+    }
+    .player-dot-marker.eliminated {
+      background: #5c6773;
+      color: #5c6773;
+      opacity: 0.65;
+    }
+    .player-dot-marker.ghost {
+      box-shadow: 0 0 0 4px rgba(240, 184, 75, 0.45), 0 0 12px #f0b84b;
+      border-color: #f0b84b;
+    }
+    .player-map-label {
+      background: rgba(10, 16, 23, 0.88) !important;
+      border: 1px solid var(--line) !important;
+      color: #e6edf3 !important;
+      font: 700 9px 'DM Mono', monospace !important;
+      padding: 1px 5px !important;
+      box-shadow: none !important;
+    }
+    .player-map-label::before {
+      display: none !important;
+    }
+    .base-square-marker {
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font: 700 10px 'DM Mono', monospace;
+      color: #fff;
+      border: 1px solid #fff;
+    }
+    .base-square-marker.red { background: rgba(235, 77, 75, 0.9); }
+    .base-square-marker.blue { background: rgba(52, 152, 219, 0.9); }
 
-        /* Overall Distance Bar */
-        .mobility-panel {
-            margin-top: 10px;
-            border: 1px solid var(--line);
-            background: #0d151e;
-            padding: 10px 12px;
-        }
-        .mobility-header {
-            display: flex;
-            justify-content: space-between;
-            font: 9px 'DM Mono', monospace;
-            color: var(--muted);
-            margin-bottom: 6px;
-        }
-        .mobility-teams {
-            display: flex;
-            justify-content: space-between;
-            font: 10px 'DM Mono', monospace;
-        }
-        .mobility-teams strong {
-            display: block;
-            font-size: 13px;
-            margin-top: 2px;
-        }
-        .mobility-bar-track {
-            display: flex;
-            height: 6px;
-            background: #1d2733;
-            border-radius: 6px;
-            overflow: hidden;
-            margin-top: 8px;
-        }
-        .mobility-bar-red {
-            background: var(--red);
-            height: 100%;
-            transition: width 0.35s ease;
-        }
-        .mobility-bar-blue {
-            background: var(--blue);
-            height: 100%;
-            transition: width 0.35s ease;
-        }
-    </style>
+    .map-head-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-mini {
+      background: #111a24;
+      color: var(--lime);
+      border: 1px solid var(--line);
+      padding: 3px 8px;
+      font: 700 10px 'DM Mono', monospace;
+      cursor: pointer;
+    }
+    .btn-mini:hover {
+      border-color: var(--lime);
+    }
+
+    /* Overall Distance Bar */
+    .mobility-panel {
+      margin-top: 10px;
+      border: 1px solid var(--line);
+      background: #0d151e;
+      padding: 10px 12px;
+    }
+    .mobility-header {
+      display: flex;
+      justify-content: space-between;
+      font: 9px 'DM Mono', monospace;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .mobility-teams {
+      display: flex;
+      justify-content: space-between;
+      font: 10px 'DM Mono', monospace;
+    }
+    .mobility-teams strong {
+      display: block;
+      font-size: 13px;
+      margin-top: 2px;
+    }
+    .mobility-bar-track {
+      display: flex;
+      height: 6px;
+      background: #1d2733;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .mobility-bar-red {
+      background: var(--red);
+      height: 100%;
+      transition: width 0.35s ease;
+    }
+    .mobility-bar-blue {
+      background: var(--blue);
+      height: 100%;
+      transition: width 0.35s ease;
+    }
+  </style>
 </head>
 
 <body>
-    <aside class="sidebar">
-        <a class="brand" href="index.html">
-            <span class="brand-mark">F</span>
-            <span>
-                OPERATION: <span class="muted">SURABAYA</span>
-                <small>COMMAND CENTER</small>
-            </span>
-        </a>
+  <aside class="sidebar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">F</span>
+      <span>
+        OPERATION: <span class="muted">SURABAYA</span>
+        <small>COMMAND CENTER</small>
+      </span>
+    </a>
 
-        <div class="nav-label">OPERATIONS</div>
-        <a class="nav active" href="#overview">▦ <span>Overview</span></a>
-        <a class="nav" href="#map">⌖ <span>Field Map</span></a>
-        <a class="nav" href="history.html">↺ <span>Match History</span></a>
+    <div class="nav-label">OPERATIONS</div>
+    <a class="nav active" href="#overview">▦ <span>Overview</span></a>
+    <a class="nav" href="#map">⌖ <span>Field Map</span></a>
+    <a class="nav" href="#commsHostSection">🎙️ <span>Tactical Comms</span></a>
+    <a class="nav" href="history.html">↺ <span>Match History</span></a>
 
-        <div class="side-bottom">
-            <span class="admin-dot"></span>
-            <div>
-                <b>ADMIN CONSOLE</b>
-                <small>LOCAL INTERFACE</small>
-            </div>
+    <div class="side-bottom">
+      <span class="admin-dot"></span>
+      <div>
+        <b>ADMIN CONSOLE</b>
+        <small>LOCAL INTERFACE</small>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">TACTICAL MONITORING / COMMAND</p>
+        <h1>COMMAND CENTER</h1>
+      </div>
+
+      <div class="top-actions">
+        <span class="live-tag"><i></i> SYSTEM ONLINE</span>
+        <span class="date">FIELD OPS · 2026</span>
+      </div>
+    </header>
+
+    <section class="control-strip">
+      <div>
+        <small>MISSION CONTROL</small>
+        <strong id="matchState">NO ACTIVE MATCH</strong>
+      </div>
+
+      <div class="control-buttons">
+        <button class="btn start" id="startBtn">▶ START MATCH</button>
+        <button class="btn stop" id="stopBtn" disabled>■ END MATCH</button>
+        <button class="btn clear-log" id="deleteAllBtn">⌫ HAPUS ALL</button>
+      </div>
+    </section>
+
+    <section class="overview" id="overview">
+      <div class="team-panels-grid" id="teamPanels">
+        <div class="chart-empty">Menunggu konfigurasi tim pertandingan...</div>
+      </div>
+
+      <div class="map-panel" id="map">
+        <div class="panel-head">
+          <div>
+            <small>ARENA INTELLIGENCE · PLAYER TRACKING</small>
+            <h2>LIVE FIELD MAP</h2>
+          </div>
+          <div class="map-head-actions">
+            <button class="btn-mini" id="recenterMapBtn" title="Pusatkan Peta">⌖ CENTER</button>
+            <span class="map-status">AWAITING DATA</span>
+          </div>
         </div>
-    </aside>
 
-    <main class="main">
-        <header class="topbar">
-            <div>
-                <p class="eyebrow">TACTICAL MONITORING / COMMAND</p>
-                <h1>COMMAND CENTER</h1>
-            </div>
+        <div class="map-wrapper">
+          <div id="tacticalMap"></div>
+        </div>
 
-            <div class="top-actions">
-                <span class="live-tag"><i></i> SYSTEM ONLINE</span>
-                <span class="date">FIELD OPS · 2026</span>
-            </div>
-        </header>
+        <div class="mobility-panel">
+          <div class="mobility-header">
+            <span>JARAK TEMPUH KESELURUHAN</span>
+            <span id="totalArenaDistance">TOTAL: 0.00 m</span>
+          </div>
 
-        <section class="control-strip">
-            <div>
-                <small>MISSION CONTROL</small>
-                <strong id="matchState">NO ACTIVE MATCH</strong>
-            </div>
+          <div class="mobility-teams" id="teamMobilityStats">
+            <span class="chart-empty">Statistik jarak per tim akan muncul di sini.</span>
+          </div>
+          <div class="mobility-bar-track dynamic-mobility-track" id="teamMobilityBars"></div>
+        </div>
 
-            <div class="control-buttons">
-                <button class="btn start" id="startBtn">▶ START MATCH</button>
-                <button class="btn stop" id="stopBtn" disabled>■ END MATCH</button>
-                <button class="btn clear-log" id="deleteAllBtn">⌫ HAPUS ALL</button>
-            </div>
-        </section>
+        <div class="map-foot">
+          <span>PLAYER TRACKING <b id="activeUnitsVal">0 UNITS</b></span>
+          <span>BASE STATUS <b id="overallBaseVal">STANDBY</b></span>
+        </div>
+      </div>
+    </section>
 
-        <section class="overview" id="overview">
-            <div class="team-panels-grid" id="teamPanels">
-                <div class="chart-empty">Menunggu konfigurasi tim pertandingan...</div>
-            </div>
-            <div class="map-panel" id="map">
-                <div class="panel-head">
-                    <div>
-                        <small>ARENA INTELLIGENCE · PLAYER TRACKING</small>
-                        <h2>LIVE FIELD MAP</h2>
-                    </div>
-                    <div class="map-head-actions">
-                        <button class="btn-mini" id="recenterMapBtn" title="Pusatkan Peta">⌖ CENTER</button>
-                        <span class="map-status">AWAITING DATA</span>
-                    </div>
-                </div>
+    <section class="lower-grid">
+      <div class="panel analytics" id="analytics">
+        <div class="panel-head">
+          <div>
+            <small>PERFORMANCE INTELLIGENCE</small>
+            <h2>PLAYER ANALYTICS</h2>
+          </div>
+          <span class="muted-tag" id="analyticsStatus">WAITING DATA</span>
+        </div>
 
-                <div class="map-wrapper">
-                    <div id="tacticalMap"></div>
-                </div>
+        <div id="playerAnalyticsList" class="player-analytics-list">
+          <div class="chart-empty">
+            Statistik pemain akan muncul setelah data pertandingan diterima.
+          </div>
+        </div>
+      </div>
 
-                <div class="mobility-panel">
-                    <div class="mobility-header">
-                        <span>JARAK TEMPUH KESELURUHAN</span>
-                        <span id="totalArenaDistance">TOTAL: 0.00 m</span>
-                    </div>
+      <div class="panel logs" id="logs">
+        <div class="panel-head">
+          <div>
+            <small>LIVE ACTIVITY STREAM</small>
+            <h2>EVENT LOG</h2>
+          </div>
 
-                    <div class="mobility-teams" id="teamMobilityStats">
-                        <span class="chart-empty">Statistik jarak per tim akan muncul di sini.</span>
-                    </div>
-                    <div class="mobility-bar-track dynamic-mobility-track" id="teamMobilityBars"></div>
-                </div>
+          <div class="log-actions">
+            <span class="muted-tag" id="eventCountTag">0 EVENTS</span>
+            <button class="btn clear-log" id="clearLogBtn" disabled>
+              CLEAR LOG
+            </button>
+          </div>
+        </div>
 
-                <div class="map-foot">
-                    <span>PLAYER TRACKING <b id="activeUnitsVal">0 UNITS</b></span>
-                    <span>BASE STATUS <b id="overallBaseVal">STANDBY</b></span>
-                </div>
-            </div>
+        <div class="log-empty" id="logEmpty">
+          Belum ada aktivitas pertandingan.
+        </div>
 
+        <div id="logList"></div>
+      </div>
+    </section>
 
-        </section>
+    <!-- TACTICAL COMMS (HOST LIVE VOICE BROADCAST & SQUAD MONITOR) -->
+    <section class="panel" id="commsHostSection" style="margin-top:12px;margin-bottom:16px;">
+      <div class="panel-head">
+        <div>
+          <small>TACTICAL COMMS / COMMAND BROADCAST</small>
+          <h2>HOST VOICE &amp; SQUAD MONITOR</h2>
+        </div>
+        <span class="muted-tag" id="commsHostStatus">STANDBY</span>
+      </div>
 
-        <section class="lower-grid">
+      <!-- LOBBY COMMS HOST -->
+      <div id="commsHostLobbyBox" style="margin-top:12px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+          <input id="commsHostName" maxlength="30" value="Command Center" placeholder="Nama Command / Host" style="flex:1;min-width:200px;background:#0a1017;border:1px solid var(--line);color:#e6edf3;padding:8px;font:11px 'DM Mono',monospace;">
+          <button type="button" class="btn-mini" id="commsHostCreateBtn" style="padding:8px 14px;">+ BUAT COMMS ROOM</button>
+        </div>
+        <div id="commsHostRoomList">
+          <div class="chart-empty">Memuat daftar Comms Room...</div>
+        </div>
+      </div>
 
-            <div class="panel analytics" id="analytics">
-                <div class="panel-head">
-                    <div>
-                        <small>PERFORMANCE INTELLIGENCE</small>
-                        <h2>PLAYER ANALYTICS</h2>
-                    </div>
-                    <span class="muted-tag" id="analyticsStatus">WAITING DATA</span>
-                </div>
+      <!-- MONITOR & LIVE VOICE BROADCAST -->
+      <div id="commsHostMonitorBox" class="hidden" style="margin-top:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 12px;border:1px solid var(--line);background:#0a1017;margin-bottom:10px;">
+          <div>
+            <small style="display:block;color:var(--muted);font:9px 'DM Mono',monospace;">OPERATION / COMMS ROOM</small>
+            <strong id="commsHostActiveCode" style="font:700 16px 'DM Mono',monospace;letter-spacing:2px;color:var(--lime);">--------</strong>
+          </div>
 
-                <div id="playerAnalyticsList" class="player-analytics-list">
-                    <div class="chart-empty">
-                        Statistik pemain akan muncul setelah data pertandingan diterima.
-                    </div>
-                </div>
-            </div>
+          <!-- PEMILIH TARGET LIVE VOICE ADMIN (DINAMIS SESUAI TIM) -->
+          <div id="commsHostVoiceTargets" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;"></div>
 
-            <div class="panel logs" id="logs">
-                <div class="panel-head">
-                    <div>
-                        <small>LIVE ACTIVITY STREAM</small>
-                        <h2>EVENT LOG</h2>
-                    </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button type="button" class="btn-mini" id="commsHostCloseRoomBtn" style="color:var(--red);border-color:var(--red);">TUTUP ROOM</button>
+          </div>
+        </div>
 
-                    <div class="log-actions">
-                        <span class="muted-tag" id="eventCountTag">0 EVENTS</span>
-                        <button class="btn clear-log" id="clearLogBtn" disabled>
-                            CLEAR LOG
-                        </button>
-                    </div>
-                </div>
+        <!-- KOLOM CHAT & ROSTER PER TIM -->
+        <div id="commsHostTeamsGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;"></div>
+      </div>
+    </section>
 
-                <div class="log-empty" id="logEmpty">
-                    Belum ada aktivitas pertandingan.
-                </div>
+    <section class="system-row">
+      <div>
+        <span class="sys-icon">◎</span>
+        <span>
+          <b>AI PROCESSING</b>
+          <small>Menunggu koneksi service AI</small>
+        </span>
+        <em>NOT CONNECTED</em>
+      </div>
 
-                <div id="logList"></div>
-            </div>
+      <div>
+        <span class="sys-icon">▣</span>
+        <span>
+          <b>CAMERA MONITOR</b>
+          <small>Belum ada stream kamera</small>
+        </span>
+        <em>0 SOURCES</em>
+      </div>
 
-        </section>
+      <div>
+        <span class="sys-icon">◈</span>
+        <span>
+          <b>DATABASE</b>
+          <small>Supabase belum dikonfigurasi</small>
+        </span>
+        <em>NOT CONNECTED</em>
+      </div>
+    </section>
 
-        <section class="system-row">
-            <div>
-                <span class="sys-icon">◎</span>
-                <span>
-                    <b>AI PROCESSING</b>
-                    <small>Menunggu koneksi service AI</small>
-                </span>
-                <em>NOT CONNECTED</em>
-            </div>
+    <footer>
+      FIELD OPS COMMAND CENTER
+      <span>ADMIN DASHBOARD · BUILD 0.1</span>
+    </footer>
+  </main>
 
-            <div>
-                <span class="sys-icon">▣</span>
-                <span>
-                    <b>CAMERA MONITOR</b>
-                    <small>Belum ada stream kamera</small>
-                </span>
-                <em>0 SOURCES</em>
-            </div>
-
-            <div>
-                <span class="sys-icon">◈</span>
-                <span>
-                    <b>DATABASE</b>
-                    <small>Supabase belum dikonfigurasi</small>
-                </span>
-                <em>NOT CONNECTED</em>
-            </div>
-        </section>
-
-        <footer>
-            FIELD OPS COMMAND CENTER
-            <span>ADMIN DASHBOARD · BUILD 0.1</span>
-        </footer>
-
-    </main>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-    <script src="app.js?v=4"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="app.js?v=4"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+  <script src="comms-host.js"></script>
 </body>
 </html>

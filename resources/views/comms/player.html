@@ -1,0 +1,1143 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tactical Comms — Player</title>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<script src="/static/comms/js/voice.js"></script>
+
+<style>
+:root {
+    --bg:#0c0d13;
+    --panel:#171a24;
+    --line:#2a3040;
+    --muted:#9aa3b5;
+    --red:#ef5350;
+    --blue:#448aff;
+    --green:#46d39a;
+}
+* { box-sizing:border-box; }
+
+body {
+    margin:0;
+    background:radial-gradient(circle at top,#1a2030,var(--bg) 55%);
+    color:#f3f5fa;
+    font:15px/1.5 system-ui,Segoe UI,sans-serif;
+    min-height:100vh;
+}
+
+.wrap { max-width:1100px; margin:auto; padding:28px 18px; }
+
+.top {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    margin-bottom:24px;
+}
+
+.brand { font-weight:900; letter-spacing:2px; }
+.sub,.muted { color:var(--muted); }
+
+.panel {
+    background:#171a24ef;
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:20px;
+    margin-bottom:16px;
+    box-shadow:0 12px 35px #0003;
+}
+
+.hidden { display:none!important; }
+
+h1 {
+    font-size:clamp(25px,4vw,38px);
+    margin:4px 0 8px;
+}
+
+h2 { margin:0 0 14px; font-size:19px; }
+
+.grid {
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:12px;
+}
+
+.room {
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:15px;
+    background:#10131c;
+}
+
+.room strong { font-size:18px; }
+
+.row {
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    align-items:center;
+}
+
+.field {
+    width:100%;
+    padding:12px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:#0e1119;
+    color:white;
+    margin:6px 0 12px;
+}
+
+button {
+    border:0;
+    border-radius:10px;
+    padding:11px 16px;
+    font-weight:800;
+    cursor:pointer;
+    background:#e9edf7;
+    color:#111827;
+}
+
+button:disabled {
+    opacity:.4;
+    cursor:not-allowed;
+}
+
+.primary { background:var(--green); }
+.red { background:var(--red); color:white; }
+.blue { background:var(--blue); color:white; }
+.ghost { background:#252b3a; color:#e8ebf3; }
+
+.notice {
+    padding:10px 12px;
+    border-radius:10px;
+    background:#252b3a;
+    color:#cbd2e2;
+    margin:10px 0;
+}
+
+.team {
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:14px;
+}
+
+.team.redteam { border-top:3px solid var(--red); }
+.team.blueteam { border-top:3px solid var(--blue); }
+
+.chat {
+    height:300px;
+    overflow:auto;
+    background:#0e1119;
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:12px;
+}
+
+.msg {
+    padding:8px 10px;
+    border-bottom:1px solid #252b37;
+    overflow-wrap:anywhere;
+}
+
+.msg small { color:var(--muted); }
+
+.tag {
+    font-size:11px;
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:1px;
+}
+
+.count { font-size:13px; color:var(--muted); }
+
+.voice-panel {
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:16px;
+    background:#10131c;
+}
+
+.voice-status {
+    padding:10px;
+    border-radius:8px;
+    background:#252b3a;
+    color:#cbd2e2;
+    margin:12px 0;
+}
+
+.voice-button {
+    width:100%;
+    padding:14px;
+    background:var(--green);
+    color:#111827;
+    font-size:15px;
+}
+
+.voice-button.active {
+    background:var(--red);
+    color:white;
+}
+
+.voice-help {
+    font-size:13px;
+    color:var(--muted);
+    margin-top:10px;
+}
+
+@media(max-width:600px) {
+    .wrap { padding:16px 12px; }
+    .panel { padding:15px; }
+    .top {
+        align-items:flex-start;
+        flex-direction:column;
+    }
+}
+</style>
+</head>
+
+<body>
+<main class="wrap">
+
+<header class="top">
+    <div>
+        <div class="brand">TACTICAL COMMS</div>
+        <div class="sub">PLAYER LOBBY / TEAM CHANNEL</div>
+    </div>
+    <div class="tag">PLAYER ACCESS</div>
+</header>
+
+<!-- ================================== -->
+<!-- PLAYER LOBBY -->
+<!-- ================================== -->
+
+<section id="lobby">
+
+    <div class="panel">
+        <div class="tag">WELCOME, PLAYER</div>
+        <h1>Pilih ruang komunikasi</h1>
+
+        <p class="muted">
+            Room yang dibuat Host akan muncul otomatis di sini.
+            Jika belum ada Room aktif, silakan tunggu.
+        </p>
+
+        <div id="roomStatus" class="notice">
+            Menghubungkan ke server...
+        </div>
+
+        <div id="roomList" class="grid"></div>
+    </div>
+
+    <div id="joinPanel" class="panel hidden">
+        <h2>
+            Masuk ke Room
+            <span id="selectedRoom"></span>
+        </h2>
+
+        <label>Nama pemain</label>
+        <input
+            id="playerName"
+            class="field"
+            maxlength="30"
+            placeholder="Masukkan nama kamu"
+        >
+
+        <label>Pilih tim</label>
+
+        <div class="row">
+            <button class="red" id="chooseRed">TIM MERAH</button>
+            <button class="blue" id="chooseBlue">TIM BIRU</button>
+        </div>
+
+        <p id="joinError" class="muted"></p>
+
+        <button id="joinButton" class="primary" disabled>
+            MASUK ROOM
+        </button>
+    </div>
+
+</section>
+
+<!-- ================================== -->
+<!-- PLAYER GAME -->
+<!-- ================================== -->
+
+<section id="game" class="hidden">
+
+    <div class="panel">
+        <div class="row" style="justify-content:space-between">
+            <div>
+                <div class="tag">CONNECTED ROOM</div>
+                <h1 id="roomTitle">TC-XXXXXX</h1>
+                <div id="teamLabel" class="muted"></div>
+            </div>
+
+            <button id="leaveButton" class="ghost">
+                Keluar Room
+            </button>
+        </div>
+    </div>
+
+    <!-- ROSTER -->
+
+    <div class="panel">
+        <h2 id="teamRosterHeading">Anggota Tim</h2>
+
+        <div class="team">
+            <div id="teamRosterCount" class="count">0/10</div>
+            <div id="teamPlayers" class="muted"></div>
+        </div>
+    </div>
+
+    <!-- LIVE VOICE CHAT -->
+
+    <div class="panel">
+        <div class="tag">REAL-TIME COMMUNICATION</div>
+        <h2>Live Voice Chat</h2>
+
+        <div class="voice-panel">
+
+            <div class="muted">
+                Live Voice dan Speech-to-Text memiliki tombol terpisah agar
+                masing-masing dapat diuji dan digunakan secara mandiri.
+                Hasil Speech-to-Text akan dikirim otomatis ke Team Chat.
+                Pastikan browser mendapatkan izin mikrofon.
+            </div>
+
+            <div id="voiceStatus" class="voice-status">
+                Menunggu token suara dari server...
+            </div>
+
+            <button id="voiceButton" class="voice-button" disabled>
+                START LIVE VOICE
+            </button>
+
+            <div id="sttStatus" class="voice-help">
+                Speech-to-Text belum aktif.
+            </div>
+
+            <button id="sttButton" class="voice-button" style="margin-top:10px" disabled>
+                START SPEECH-TO-TEXT
+            </button>
+
+        </div>
+    </div>
+
+    <!-- TEAM CHAT -->
+
+    <div class="panel">
+
+        <div class="row" style="justify-content:space-between">
+            <h2 id="chatHeading">Team Chat</h2>
+            <span class="tag">PRIVATE TEAM CHANNEL</span>
+        </div>
+
+        <div id="chat" class="chat"></div>
+
+        <div class="row" style="margin-top:10px">
+            <input
+                id="message"
+                class="field"
+                style="flex:1;margin:0"
+                maxlength="1000"
+                placeholder="Ketik pesan untuk tim kamu..."
+            >
+
+            <button id="sendButton" class="primary">
+                KIRIM
+            </button>
+        </div>
+
+    </div>
+
+</section>
+</main>
+
+<script>
+'use strict';
+
+// ========================================
+// SOCKET.IO DAN ELEMENT
+// ========================================
+
+const socket = io();
+
+const $ = id => document.getElementById(id);
+
+let selectedRoom = null;
+let selectedTeam = null;
+
+let playerToken = sessionStorage.getItem('tc_player_token');
+
+if (!playerToken) {
+    playerToken = (
+        crypto.randomUUID
+            ? crypto.randomUUID()
+            : String(Date.now()) + Math.random()
+    ) + String(Date.now());
+
+    sessionStorage.setItem('tc_player_token', playerToken);
+}
+
+// ========================================
+// LIVEKIT & STT STATE
+// ========================================
+
+let playerVoiceToken = null;
+let playerVoiceConnection = null;
+
+let microphoneEnabled = false;
+let voiceBusy = false;
+
+let recognition = null;
+let sttShouldRun = false;
+let sttRestartTimer = null;
+
+const SpeechRecognition =
+    window.SpeechRecognition ||
+    window.webkitSpeechRecognition;
+
+// ========================================
+// PAGE HELPER
+// ========================================
+
+function show(id) {
+    $('lobby').classList.toggle('hidden', id !== 'lobby');
+    $('game').classList.toggle('hidden', id !== 'game');
+}
+
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, c => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[c]));
+}
+
+// ========================================
+// RESET LIVEKIT UI
+// ========================================
+
+function resetVoiceUI(status = 'Belum terhubung.') {
+    microphoneEnabled = false;
+
+    $('voiceButton').disabled = !playerVoiceToken;
+    $('voiceButton').classList.remove('active');
+    $('voiceButton').textContent = 'START LIVE VOICE';
+
+    $('voiceStatus').textContent = status;
+}
+
+// ========================================
+// STOP SPEECH RECOGNITION HELPER
+// ========================================
+
+function stopSpeechRecognition() {
+    sttShouldRun = false;
+    clearTimeout(sttRestartTimer);
+
+    if (recognition) {
+        const currentRec = recognition;
+        recognition = null;
+        try {
+            currentRec.onend = null;
+            currentRec.onerror = null;
+            currentRec.onresult = null;
+            currentRec.abort();
+        } catch (_) {}
+    }
+
+    if ($('sttButton')) {
+        $('sttButton').textContent = 'START SPEECH-TO-TEXT';
+        $('sttButton').classList.remove('active');
+        $('sttButton').disabled = !SpeechRecognition;
+    }
+    if ($('sttStatus')) {
+        $('sttStatus').textContent = SpeechRecognition
+            ? 'Speech-to-Text dihentikan.'
+            : 'Browser ini belum mendukung Speech-to-Text.';
+    }
+}
+
+// ========================================
+// STOP LIVE VOICE HELPER
+// ========================================
+
+async function stopLiveVoice() {
+    if (playerVoiceConnection && microphoneEnabled) {
+        microphoneEnabled = false;
+        try {
+            await playerVoiceConnection.setMicrophoneEnabled(false);
+        } catch (err) {
+            console.warn('[LIVE VOICE STOP]', err);
+        }
+    }
+    $('voiceButton').classList.remove('active');
+    $('voiceButton').textContent = 'START LIVE VOICE';
+    $('voiceStatus').textContent = 'Live Voice nonaktif.';
+}
+
+// ========================================
+// DISCONNECT LIVEKIT
+// ========================================
+
+async function disconnectPlayerVoice() {
+    stopSpeechRecognition();
+
+    const connection = playerVoiceConnection;
+
+    playerVoiceConnection = null;
+    playerVoiceToken = null;
+
+    microphoneEnabled = false;
+    voiceBusy = false;
+
+    resetVoiceUI('Koneksi suara ditutup.');
+
+    if (connection) {
+        try {
+            await connection.disconnect();
+        } catch (error) {
+            console.error('[PLAYER VOICE DISCONNECT]', error);
+        }
+    }
+}
+
+// ========================================
+// REQUEST LIVEKIT TOKEN
+// ========================================
+
+function requestPlayerVoiceToken() {
+    if (!socket.connected) {
+        $('voiceStatus').textContent =
+            'Koneksi server belum tersedia.';
+        return;
+    }
+
+    $('voiceStatus').textContent =
+        'Meminta akses suara dari server...';
+
+    $('voiceButton').disabled = true;
+
+    socket.emit('player_voice_token_request');
+
+    console.log('[PLAYER VOICE] Meminta token suara.');
+}
+
+// ========================================
+// RECEIVE LIVEKIT TOKEN
+// ========================================
+
+socket.on('player_voice_token', data => {
+    if (!data || !data.url || !data.token) {
+        console.error('[PLAYER VOICE] Token tidak lengkap:', data);
+
+        $('voiceStatus').textContent =
+            'Token suara tidak lengkap.';
+
+        return;
+    }
+
+    if (data.team !== selectedTeam) {
+        console.error('[PLAYER VOICE] Tim token tidak sesuai.');
+
+        $('voiceStatus').textContent =
+            'Token suara tidak sesuai dengan tim kamu.';
+
+        return;
+    }
+
+    playerVoiceToken = data;
+
+    $('voiceStatus').textContent =
+        `Siap terhubung ke Voice Chat Tim ${data.team.toUpperCase()}.`;
+
+    $('voiceButton').disabled = false;
+
+    $('voiceButton').textContent = 'START LIVE VOICE';
+
+    console.log(
+        '[PLAYER VOICE] Token suara diterima.',
+        'Tim:',
+        data.team,
+        'Room:',
+        data.room_name
+    );
+});
+
+// ========================================
+// RECEIVE VOICE ERROR
+// ========================================
+
+socket.on('voice_error', data => {
+    console.error('[PLAYER VOICE ERROR]', data);
+
+    $('voiceStatus').textContent =
+        data.message || 'Terjadi kesalahan pada Voice Chat.';
+
+    $('voiceButton').disabled = !playerVoiceToken;
+});
+
+// ========================================
+// ACTIVATE / DEACTIVATE MICROPHONE
+// ========================================
+
+async function togglePlayerMicrophone() {
+    if (voiceBusy) return;
+
+    if (!playerVoiceToken) {
+        $('voiceStatus').textContent = 'Token suara belum tersedia.';
+        return;
+    }
+
+    if (!window.TacticalVoice) {
+        $('voiceStatus').textContent = 'Modul LiveKit belum berhasil dimuat.';
+        console.error('[PLAYER VOICE] TacticalVoice tidak tersedia.');
+        return;
+    }
+
+    voiceBusy = true;
+    $('voiceButton').disabled = true;
+
+    try {
+        if (playerVoiceConnection && microphoneEnabled) {
+            await stopLiveVoice();
+            console.log('[LIVE VOICE] Mikrofon Live Voice dihentikan.');
+            return;
+        }
+
+        // Hentikan Speech-to-Text terlebih dahulu agar tidak bentrok akses mikrofon
+        if (sttShouldRun) {
+            stopSpeechRecognition();
+            await new Promise(r => setTimeout(r, 250));
+        }
+
+        if (!playerVoiceConnection) {
+            $('voiceStatus').textContent = 'Menghubungkan ke LiveKit...';
+            const tokenAtStart = playerVoiceToken;
+
+            const connection = await TacticalVoice.connect({
+                url: tokenAtStart.url,
+                token: tokenAtStart.token,
+                canPublish: true,
+                onStatus: status => {
+                    $('voiceStatus').textContent = status;
+                },
+                onSpeaking: speakers => {
+                    if (speakers.length > 0) {
+                        console.log('[PLAYER VOICE] Anggota sedang berbicara:', speakers);
+                    }
+                }
+            });
+
+            if (playerVoiceToken !== tokenAtStart) {
+                await connection.disconnect();
+                return;
+            }
+
+            playerVoiceConnection = connection;
+        }
+
+        await playerVoiceConnection.setMicrophoneEnabled(true);
+        microphoneEnabled = true;
+
+        $('voiceButton').classList.add('active');
+        $('voiceButton').textContent = 'STOP LIVE VOICE';
+        $('voiceStatus').textContent = 'Live Voice aktif. Kamu dapat berbicara dengan tim.';
+
+        console.log('[LIVE VOICE] Mikrofon Live Voice aktif.');
+
+    } catch (error) {
+        console.error('[TALK ERROR]', error);
+        microphoneEnabled = false;
+        $('voiceButton').classList.remove('active');
+        $('voiceButton').textContent = 'START LIVE VOICE';
+        $('voiceStatus').textContent = 'Gagal mengaktifkan Live Voice: ' + error.message;
+
+    } finally {
+        voiceBusy = false;
+        $('voiceButton').disabled = !playerVoiceToken;
+    }
+}
+
+$('voiceButton').addEventListener('click', togglePlayerMicrophone);
+
+// ========================================
+// PLAYER LOBBY
+// ========================================
+
+function renderRooms(rooms) {
+    $('roomList').innerHTML = '';
+
+    $('roomStatus').textContent = rooms.length
+        ? `${rooms.length} Room aktif. Pilih Room untuk bergabung.`
+        : 'Belum ada Room aktif. Silakan tunggu Host membuat Room.';
+
+    rooms.forEach(room => {
+
+        const element = document.createElement('div');
+
+        element.className = 'room';
+
+        element.innerHTML = `
+            <strong>${escapeHtml(room.room_id)}</strong>
+            <div class="muted">
+                Host: ${escapeHtml(room.host_name)}
+            </div>
+            <div class="count">
+                Merah ${room.red_count}/10 · Biru ${room.blue_count}/10
+            </div>
+            <button class="primary" style="margin-top:12px;width:100%">
+                PILIH ROOM
+            </button>
+        `;
+
+        element.querySelector('button').onclick = () => {
+
+            selectedRoom = room.room_id;
+
+            $('selectedRoom').textContent = room.room_id;
+
+            $('joinPanel').classList.remove('hidden');
+
+            $('joinError').textContent = '';
+
+            window.scrollTo({
+                top: document.body.scrollHeight,
+                behavior: 'smooth'
+            });
+        };
+
+        $('roomList').appendChild(element);
+    });
+}
+
+// ========================================
+// SOCKET CONNECTION
+// ========================================
+
+socket.on('connect', () => {
+
+    console.log('[PLAYER] Socket terhubung:', socket.id);
+
+    socket.emit('player_list_rooms');
+
+    if (sessionStorage.getItem('tc_in_room') === 'yes') {
+
+        socket.emit('player_resume', {
+            player_token: playerToken
+        });
+    }
+});
+
+socket.on('disconnect', () => {
+
+    console.warn('[PLAYER] Socket terputus.');
+
+    disconnectPlayerVoice();
+
+    if (sessionStorage.getItem('tc_in_room') === 'yes') {
+        $('voiceStatus').textContent =
+            'Koneksi server terputus. Menunggu tersambung kembali.';
+    }
+});
+
+socket.on('connect_error', error => {
+
+    console.error('[PLAYER SOCKET ERROR]', error.message);
+
+    $('roomStatus').textContent =
+        'Gagal terhubung ke server: ' + error.message;
+});
+
+socket.on('room_list_update', data => {
+    renderRooms(data.rooms || []);
+});
+
+// ========================================
+// TEAM SELECTION
+// ========================================
+
+$('chooseRed').onclick = () => {
+
+    selectedTeam = 'merah';
+
+    $('chooseRed').style.outline = '3px solid white';
+    $('chooseBlue').style.outline = 'none';
+
+    $('joinButton').disabled = false;
+};
+
+$('chooseBlue').onclick = () => {
+
+    selectedTeam = 'biru';
+
+    $('chooseBlue').style.outline = '3px solid white';
+    $('chooseRed').style.outline = 'none';
+
+    $('joinButton').disabled = false;
+};
+
+// ========================================
+// JOIN ROOM
+// ========================================
+
+$('joinButton').onclick = () => {
+
+    if (!selectedRoom || !selectedTeam) {
+        $('joinError').textContent =
+            'Pilih Room dan tim terlebih dahulu.';
+        return;
+    }
+
+    if (!$('playerName').value.trim()) {
+        $('joinError').textContent =
+            'Masukkan nama pemain terlebih dahulu.';
+        return;
+    }
+
+    socket.emit('player_join_room', {
+        room_id: selectedRoom,
+        name: $('playerName').value.trim(),
+        team: selectedTeam,
+        player_token: playerToken
+    });
+};
+
+socket.on('player_error', data => {
+    $('joinError').textContent = data.message;
+});
+
+socket.on('resume_unavailable', () => {
+
+    sessionStorage.removeItem('tc_in_room');
+
+    disconnectPlayerVoice();
+
+    show('lobby');
+});
+
+// ========================================
+// PLAYER JOINED
+// ========================================
+
+socket.on('player_joined', data => {
+
+    sessionStorage.setItem('tc_in_room', 'yes');
+
+    playerToken = data.player_token || playerToken;
+
+    sessionStorage.setItem('tc_player_token', playerToken);
+
+    selectedRoom = data.room_id;
+    selectedTeam = data.team;
+
+    $('roomTitle').textContent = data.room_id;
+
+    $('teamLabel').textContent =
+        `${data.name} · Tim ${data.team.toUpperCase()}`;
+
+    $('chatHeading').textContent =
+        `Team Chat — ${data.team.toUpperCase()}`;
+
+    $('chat').innerHTML = '';
+
+    (data.messages || []).forEach(addMessage);
+
+    renderTeamRoster(data.players || [], data.team);
+
+    show('game');
+
+    requestPlayerVoiceToken();
+});
+
+// ========================================
+// CHAT
+// ========================================
+
+function addMessage(message) {
+
+    const element = document.createElement('div');
+
+    element.className = 'msg';
+
+    const time = message.timestamp
+        ? new Date(message.timestamp).toLocaleTimeString()
+        : '';
+
+    element.innerHTML = `
+        <strong>${escapeHtml(message.name)}</strong>
+        <small>· ${escapeHtml(time)}</small>
+        <div>${escapeHtml(message.message)}</div>
+        ${message.source === 'voice'
+            ? '<small>Speech-to-Text</small>'
+            : ''}
+    `;
+
+    $('chat').appendChild(element);
+
+    $('chat').scrollTop = $('chat').scrollHeight;
+}
+
+socket.on('chat_update', message => {
+
+    if (message.team === selectedTeam) {
+        addMessage(message);
+    }
+});
+
+// ========================================
+// TEAM ROSTER
+// ========================================
+
+socket.on('room_roster', data => {
+
+    if (
+        data.room_id === selectedRoom ||
+        $('roomTitle').textContent === data.room_id
+    ) {
+        if (data.team === selectedTeam) {
+            renderTeamRoster(data.players || [], data.team);
+        }
+    }
+});
+
+function renderTeamRoster(players, team = selectedTeam) {
+
+    $('teamRosterHeading').textContent =
+        `Anggota Tim ${String(team || '').toUpperCase()}`;
+
+    $('teamRosterCount').textContent =
+        `${players.length}/10 anggota`;
+
+    $('teamPlayers').innerHTML =
+        players.map(player =>
+            `${escapeHtml(player.name)} ${player.online ? '🟢' : '⚪'}`
+        ).join('<br>') || 'Belum ada anggota';
+}
+
+// ========================================
+// SEND TEXT
+// ========================================
+
+function send(source = 'text') {
+
+    const message = $('message').value.trim();
+
+    if (!message) return;
+
+    socket.emit('send_text', {
+        message,
+        source
+    });
+
+    $('message').value = '';
+}
+
+$('sendButton').onclick = () => send();
+
+$('message').addEventListener('keydown', event => {
+
+    if (event.key === 'Enter') {
+        send();
+    }
+});
+
+// ========================================
+// LEAVE ROOM
+// ========================================
+
+$('leaveButton').onclick = async () => {
+
+    await disconnectPlayerVoice();
+
+    socket.emit('player_leave_room');
+
+    sessionStorage.removeItem('tc_in_room');
+
+    selectedRoom = null;
+    selectedTeam = null;
+
+    show('lobby');
+
+    socket.emit('player_list_rooms');
+};
+
+socket.on('player_left', () => {
+
+    disconnectPlayerVoice();
+
+    sessionStorage.removeItem('tc_in_room');
+
+    selectedRoom = null;
+    selectedTeam = null;
+
+    show('lobby');
+});
+
+// ========================================
+// ROOM CLOSED
+// ========================================
+
+socket.on('room_closed', data => {
+
+    disconnectPlayerVoice();
+
+    alert(data.message);
+
+    sessionStorage.removeItem('tc_in_room');
+
+    selectedRoom = null;
+    selectedTeam = null;
+
+    show('lobby');
+
+    socket.emit('player_list_rooms');
+});
+
+// ========================================
+// SYSTEM NOTICE
+// ========================================
+
+socket.on('system_notice', data => {
+
+    const element = document.createElement('div');
+
+    element.className = 'notice';
+
+    element.textContent = data.message;
+
+    $('chat').appendChild(element);
+});
+
+socket.on('message_error', data => {
+    alert(data.message);
+});
+
+// ========================================
+// SPEECH TO TEXT (FRESH INSTANCE & MIC RELEASE)
+// ========================================
+
+function createAndStartRecognition() {
+    if (!SpeechRecognition || !sttShouldRun) return;
+
+    if (recognition) {
+        try {
+            recognition.onend = null;
+            recognition.abort();
+        } catch (_) {}
+    }
+
+    const rec = new SpeechRecognition();
+    rec.lang = 'id-ID';
+    rec.continuous = true;
+    rec.interimResults = true;
+
+    rec.onstart = () => {
+        $('sttButton').textContent = 'STOP SPEECH-TO-TEXT';
+        $('sttButton').classList.add('active');
+        $('sttStatus').textContent = 'Speech-to-Text aktif. Silakan bicara...';
+    };
+
+    rec.onresult = event => {
+        let interimText = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+
+            if (event.results[i].isFinal) {
+                const finalClean = transcript.trim();
+                if (finalClean) {
+                    $('message').value = finalClean;
+                    send('voice');
+                    $('sttStatus').textContent = 'Terkirim: "' + finalClean + '"';
+                }
+            } else {
+                interimText += transcript;
+            }
+        }
+
+        if (interimText.trim()) {
+            $('sttStatus').textContent = 'Mendengar: ' + interimText.trim() + '...';
+        }
+    };
+
+    rec.onerror = event => {
+        console.warn('[STT ERROR]', event.error);
+
+        if (event.error === 'no-speech' || event.error === 'aborted') {
+            return;
+        }
+
+        $('sttStatus').textContent = 'Speech-to-Text error: ' + event.error;
+
+        if (['not-allowed', 'service-not-allowed', 'audio-capture'].includes(event.error)) {
+            stopSpeechRecognition();
+        }
+    };
+
+    rec.onend = () => {
+        if (sttShouldRun) {
+            clearTimeout(sttRestartTimer);
+            sttRestartTimer = setTimeout(() => {
+                createAndStartRecognition();
+            }, 200);
+        } else {
+            $('sttButton').textContent = 'START SPEECH-TO-TEXT';
+            $('sttButton').classList.remove('active');
+            $('sttStatus').textContent = 'Speech-to-Text dihentikan.';
+        }
+    };
+
+    recognition = rec;
+
+    try {
+        rec.start();
+    } catch (error) {
+        console.error('[STT START ERROR]', error);
+        $('sttStatus').textContent = 'Gagal memulai Speech-to-Text: ' + error.message;
+        stopSpeechRecognition();
+    }
+}
+
+if (SpeechRecognition) {
+    $('sttButton').disabled = false;
+
+    $('sttButton').addEventListener('click', async () => {
+        if (sttShouldRun) {
+            stopSpeechRecognition();
+            return;
+        }
+
+        $('sttButton').disabled = true;
+        $('sttStatus').textContent = 'Menyiapkan mikrofon untuk Speech-to-Text...';
+
+        // Matikan Live Voice dan tunggu 350ms agar driver audio melepas kunci mikrofon
+        if (playerVoiceConnection && microphoneEnabled) {
+            await stopLiveVoice();
+            await new Promise(resolve => setTimeout(resolve, 350));
+        }
+
+        sttShouldRun = true;
+        $('sttButton').disabled = false;
+        createAndStartRecognition();
+    });
+
+} else {
+    $('sttButton').disabled = true;
+    $('sttStatus').textContent =
+        'Browser ini belum mendukung Speech-to-Text.';
+}
+
+console.log('[PLAYER] Dashboard berhasil dimuat.');
+</script>
+
+</body>
+</html>

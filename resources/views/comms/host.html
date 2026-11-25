@@ -1,0 +1,873 @@
+
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tactical Comms — Host</title>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<script src="/static/comms/js/voice.js"></script>
+
+<style>
+:root {
+    --bg:#0c0d13;
+    --panel:#171a24;
+    --line:#2a3040;
+    --muted:#9aa3b5;
+    --red:#ef5350;
+    --blue:#448aff;
+    --green:#46d39a;
+}
+* { box-sizing:border-box; }
+body {
+    margin:0;
+    background:radial-gradient(circle at top,#1a2030,var(--bg) 55%);
+    color:#f3f5fa;
+    font:15px/1.5 system-ui,Segoe UI,sans-serif;
+    min-height:100vh;
+}
+.wrap { max-width:1200px; margin:auto; padding:28px 18px; }
+.top,.row {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    flex-wrap:wrap;
+}
+.brand { font-weight:900; letter-spacing:2px; }
+.muted { color:var(--muted); }
+.tag {
+    font-size:11px;
+    color:var(--muted);
+    letter-spacing:1px;
+    text-transform:uppercase;
+}
+.panel {
+    background:#171a24ef;
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:20px;
+    margin:16px 0;
+}
+.hidden { display:none!important; }
+h1 { font-size:clamp(25px,4vw,38px); margin:4px 0 8px; }
+h2 { margin:0 0 14px; font-size:19px; }
+.field {
+    padding:12px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:#0e1119;
+    color:white;
+    margin:6px 0;
+}
+.grid {
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+    gap:12px;
+}
+.room {
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:15px;
+    background:#10131c;
+}
+.room.active { outline:2px solid var(--green); }
+button {
+    border:0;
+    border-radius:10px;
+    padding:11px 16px;
+    font-weight:800;
+    cursor:pointer;
+    background:#e9edf7;
+    color:#111827;
+}
+button:disabled { opacity:.5; cursor:not-allowed; }
+.primary { background:var(--green); }
+.danger { background:#b93636; color:white; }
+.ghost { background:#252b3a; color:white; }
+.notice {
+    padding:10px 12px;
+    border-radius:10px;
+    background:#252b3a;
+    color:#cbd2e2;
+    margin:10px 0;
+}
+.teams {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+}
+.team {
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:14px;
+}
+.redteam { border-top:3px solid var(--red); }
+.blueteam { border-top:3px solid var(--blue); }
+.chat {
+    height:280px;
+    overflow:auto;
+    background:#0e1119;
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:12px;
+}
+.msg {
+    padding:8px 10px;
+    border-bottom:1px solid #252b37;
+    overflow-wrap:anywhere;
+}
+.msg small { color:var(--muted); }
+
+.voice-monitor {
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+    margin:16px 0;
+}
+.voice-card {
+    flex:1;
+    min-width:220px;
+    padding:14px;
+    border:1px solid var(--line);
+    border-radius:10px;
+    background:#10131c;
+}
+.voice-red { border-color:#e05252; }
+.voice-blue { border-color:#4388e8; }
+
+@media(max-width:700px) {
+    .teams { grid-template-columns:1fr; }
+    .wrap { padding:16px 12px; }
+    .panel { padding:15px; }
+}
+</style>
+</head>
+
+<body>
+<main class="wrap">
+
+<header class="top">
+    <div>
+        <div class="brand">TACTICAL COMMS</div>
+        <div class="muted">HOST DASHBOARD / SPECTATOR MODE</div>
+    </div>
+    <div class="tag">HOST · READ ONLY</div>
+</header>
+
+<!-- DASHBOARD -->
+<section id="dashboard">
+
+    <div class="panel">
+        <div class="tag">ROOM MANAGEMENT</div>
+        <h1>Host Dashboard</h1>
+        <p class="muted">
+            Buat dan kelola maksimal 10 Room aktif.
+            Host hanya memantau dan tidak dapat mengirim pesan atau suara.
+        </p>
+
+        <div class="row">
+            <input
+                id="hostName"
+                class="field"
+                maxlength="30"
+                placeholder="Nama Host (contoh: Admin)"
+                value="Host"
+            >
+            <button id="createRoom" class="primary">
+                ＋ BUAT ROOM
+            </button>
+        </div>
+
+        <div id="hostStatus" class="notice">
+            Menghubungkan ke server...
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="row">
+            <h2>Room Aktif</h2>
+            <span id="roomCount" class="tag">0 / 10</span>
+        </div>
+        <div id="roomList" class="grid"></div>
+    </div>
+
+</section>
+
+<!-- MONITOR -->
+<section id="monitor" class="hidden">
+
+    <div class="panel">
+        <div class="row">
+            <div>
+                <div class="tag">SPECTATOR MONITOR</div>
+                <h1 id="monitorTitle">TC-XXXXXX</h1>
+                <div class="muted">
+                    Host dapat membaca chat kedua tim.
+                    Mode ini tidak menyediakan input chat/mikrofon Host.
+                </div>
+            </div>
+
+            <div class="row">
+                <button id="backButton" class="ghost">
+                    ← Daftar Room
+                </button>
+                <button id="closeRoom" class="danger">
+                    TUTUP ROOM
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ROSTER -->
+    <div class="panel">
+        <h2>Daftar Peserta</h2>
+
+        <div class="teams">
+            <div class="team redteam">
+                <strong style="color:var(--red)">TIM MERAH</strong>
+                <div id="redCount" class="muted">0/10</div>
+                <div id="redRoster" class="muted"></div>
+            </div>
+
+            <div class="team blueteam">
+                <strong style="color:var(--blue)">TIM BIRU</strong>
+                <div id="blueCount" class="muted">0/10</div>
+                <div id="blueRoster" class="muted"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHAT -->
+    <div class="teams">
+        <div class="panel">
+            <h2 style="color:var(--red)">Chat Tim Merah</h2>
+            <div id="redChat" class="chat"></div>
+        </div>
+
+        <div class="panel">
+            <h2 style="color:var(--blue)">Chat Tim Biru</h2>
+            <div id="blueChat" class="chat"></div>
+        </div>
+    </div>
+
+    <!-- VOICE MONITOR -->
+    <div class="notice">
+        Host dapat memantau suara dari kedua tim.
+        Host tidak dapat mengirim suara.
+    </div>
+
+    <div class="voice-monitor">
+
+        <div class="voice-card voice-red">
+            <h3>🔴 Monitor Tim Merah</h3>
+            <p id="redVoiceStatus">Belum terhubung</p>
+            <button id="redVoiceButton" type="button">
+                Dengarkan Tim Merah
+            </button>
+        </div>
+
+        <div class="voice-card voice-blue">
+            <h3>🔵 Monitor Tim Biru</h3>
+            <p id="blueVoiceStatus">Belum terhubung</p>
+            <button id="blueVoiceButton" type="button">
+                Dengarkan Tim Biru
+            </button>
+        </div>
+
+    </div>
+
+</section>
+</main>
+
+<script>
+'use strict';
+
+// ========================================
+// DASAR SOCKET.IO DAN HOST
+// ========================================
+
+const socket = io();
+const $ = id => document.getElementById(id);
+
+let hostToken = localStorage.getItem('tc_host_token');
+
+if (!hostToken) {
+    hostToken = (
+        crypto.randomUUID
+            ? crypto.randomUUID()
+            : String(Date.now()) + Math.random()
+    ) + String(Date.now());
+
+    localStorage.setItem('tc_host_token', hostToken);
+}
+
+let currentRoom = null;
+
+// ========================================
+// LIVEKIT STATE
+// ========================================
+
+let voiceRoomId = null;
+let hostVoiceTokens = null;
+
+let redVoiceConnection = null;
+let blueVoiceConnection = null;
+
+let redVoiceBusy = false;
+let blueVoiceBusy = false;
+
+// ========================================
+// HELPER
+// ========================================
+
+function esc(value) {
+    return String(value).replace(/[&<>"']/g, c => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[c]));
+}
+
+function showMonitor(on) {
+    $('dashboard').classList.toggle('hidden', on);
+    $('monitor').classList.toggle('hidden', !on);
+}
+
+// ========================================
+// LIVEKIT DISCONNECT
+// ========================================
+
+function disconnectHostVoice() {
+    const red = redVoiceConnection;
+    const blue = blueVoiceConnection;
+
+    redVoiceConnection = null;
+    blueVoiceConnection = null;
+
+    hostVoiceTokens = null;
+    voiceRoomId = null;
+
+    redVoiceBusy = false;
+    blueVoiceBusy = false;
+
+    $('redVoiceStatus').textContent = 'Belum terhubung';
+    $('blueVoiceStatus').textContent = 'Belum terhubung';
+
+    $('redVoiceButton').textContent = 'Dengarkan Tim Merah';
+    $('blueVoiceButton').textContent = 'Dengarkan Tim Biru';
+
+    $('redVoiceButton').disabled = false;
+    $('blueVoiceButton').disabled = false;
+
+    if (red) {
+        red.disconnect().catch(console.error);
+    }
+
+    if (blue) {
+        blue.disconnect().catch(console.error);
+    }
+}
+
+// ========================================
+// SOCKET CONNECTION
+// ========================================
+
+socket.on('connect', () => {
+    console.log('HOST SOCKET CONNECTED:', socket.id);
+
+    $('hostStatus').textContent =
+        'Socket terhubung. Mendaftarkan Host...';
+
+    socket.emit('host_register', {
+        host_token: hostToken
+    });
+});
+
+socket.on('disconnect', reason => {
+    console.warn('HOST SOCKET DISCONNECTED:', reason);
+
+    $('hostStatus').textContent =
+        'Koneksi terputus: ' + reason;
+
+    disconnectHostVoice();
+});
+
+socket.on('connect_error', error => {
+    console.error('HOST SOCKET ERROR:', error.message);
+
+    $('hostStatus').textContent =
+        'Gagal terhubung: ' + error.message;
+});
+
+socket.io.on('reconnect', () => {
+    console.log('HOST SOCKET RECONNECTED');
+});
+
+socket.io.on('reconnect_attempt', () => {
+    console.log('HOST SOCKET MENCOBA MENYAMBUNG KEMBALI...');
+});
+
+// ========================================
+// HOST REGISTERED
+// ========================================
+
+socket.on('host_registered', data => {
+    renderRooms(data.rooms || []);
+
+    $('hostStatus').textContent =
+        'Terhubung. Kamu dapat membuat maksimal 10 Room.';
+});
+
+socket.on('host_room_list_update', data => {
+    renderRooms(data.rooms || []);
+});
+
+socket.on('host_error', data => {
+    console.error('[HOST ERROR]', data);
+
+    $('hostStatus').textContent =
+        data.message || 'Terjadi kesalahan pada Host.';
+});
+
+// ========================================
+// ROOM LIST
+// ========================================
+
+function renderRooms(rooms) {
+    $('roomCount').textContent = `${rooms.length} / 10`;
+
+    if (!rooms.length) {
+        $('roomList').innerHTML =
+            '<div class="muted">Belum ada Room. Buat Room pertama.</div>';
+        return;
+    }
+
+    $('roomList').innerHTML = '';
+
+    rooms.forEach(room => {
+        const element = document.createElement('div');
+
+        element.className =
+            'room' + (currentRoom === room.room_id ? ' active' : '');
+
+        element.innerHTML = `
+            <strong>${esc(room.room_id)}</strong>
+            <div class="muted">Host: ${esc(room.host_name)}</div>
+            <div class="muted">
+                Merah ${room.red_count}/10 · Biru ${room.blue_count}/10
+            </div>
+            <button class="primary" style="width:100%;margin-top:10px">
+                MASUK / PANTAU
+            </button>
+        `;
+
+        element.querySelector('button').onclick = () => {
+            enterRoom(room.room_id);
+        };
+
+        $('roomList').appendChild(element);
+    });
+}
+
+// ========================================
+// CREATE ROOM
+// ========================================
+
+$('createRoom').addEventListener('click', () => {
+    if (!socket.connected) {
+        $('hostStatus').textContent =
+            'Belum terhubung ke server. Tunggu koneksi kembali.';
+        return;
+    }
+
+    const hostName =
+        $('hostName').value.trim() || 'Host';
+
+    $('hostStatus').textContent =
+        'Mengirim permintaan pembuatan Room...';
+
+    console.log('[HOST] Meminta pembuatan Room.');
+
+    socket.emit('host_create_room', {
+        host_token: hostToken,
+        host_name: hostName
+    });
+});
+
+socket.on('host_room_created', data => {
+    console.log('[HOST] Room berhasil dibuat:', data);
+
+    if (!data || !data.room || !data.room.room_id) {
+        $('hostStatus').textContent =
+            'Server mengirim data Room yang tidak valid.';
+        return;
+    }
+
+    $('hostStatus').textContent =
+        `Room ${data.room.room_id} berhasil dibuat.`;
+
+    enterRoom(data.room.room_id);
+});
+
+// ========================================
+// ENTER ROOM
+// ========================================
+
+function enterRoom(roomId) {
+    disconnectHostVoice();
+
+    currentRoom = roomId;
+    voiceRoomId = roomId;
+
+    socket.emit('host_enter_room', {
+        room_id: roomId,
+        host_token: hostToken
+    });
+
+    $('monitorTitle').textContent = roomId;
+
+    $('redChat').innerHTML = '';
+    $('blueChat').innerHTML = '';
+
+    showMonitor(true);
+}
+
+// ========================================
+// HOST MONITOR JOINED
+// ========================================
+
+socket.on('host_monitor_joined', data => {
+    currentRoom = data.room_id;
+    voiceRoomId = data.room_id;
+
+    $('monitorTitle').textContent = data.room_id;
+
+    renderRoster(data.players || []);
+
+    (data.red_messages || []).forEach(addChat);
+    (data.blue_messages || []).forEach(addChat);
+
+    showMonitor(true);
+
+    console.log('[HOST] Meminta token monitor LiveKit.');
+
+    socket.emit('host_voice_tokens_request', {
+        room_id: data.room_id,
+        host_token: hostToken
+    });
+});
+
+// ========================================
+// CHAT MONITOR
+// ========================================
+
+function addChat(message) {
+    const target =
+        message.team === 'merah' ? 'redChat' : 'blueChat';
+
+    const element = document.createElement('div');
+
+    element.className = 'msg';
+
+    const time = message.timestamp
+        ? new Date(message.timestamp).toLocaleTimeString()
+        : '';
+
+    element.innerHTML = `
+        <strong>${esc(message.name)}</strong>
+        <small>· ${esc(time)}</small>
+        <div>${esc(message.message)}</div>
+        ${message.source === 'voice'
+            ? '<small>Speech-to-Text</small>'
+            : ''}
+    `;
+
+    $(target).appendChild(element);
+    $(target).scrollTop = $(target).scrollHeight;
+}
+
+socket.on('host_chat_update', message => {
+    if (
+        message.team === 'merah' ||
+        message.team === 'biru'
+    ) {
+        addChat(message);
+    }
+});
+
+// ========================================
+// PLAYER ROSTER
+// ========================================
+
+socket.on('host_room_roster', data => {
+    if (data.room_id === currentRoom) {
+        renderRoster(data.players || []);
+    }
+});
+
+function renderRoster(players) {
+    const red = players.filter(p => p.team === 'merah');
+    const blue = players.filter(p => p.team === 'biru');
+
+    $('redCount').textContent = `${red.length}/10`;
+    $('blueCount').textContent = `${blue.length}/10`;
+
+    $('redRoster').innerHTML =
+        red.map(p =>
+            `${esc(p.name)} ${p.online ? '🟢' : '⚪'}`
+        ).join('<br>') || 'Belum ada anggota';
+
+    $('blueRoster').innerHTML =
+        blue.map(p =>
+            `${esc(p.name)} ${p.online ? '🟢' : '⚪'}`
+        ).join('<br>') || 'Belum ada anggota';
+}
+
+// ========================================
+// BACK TO ROOM LIST
+// ========================================
+
+$('backButton').onclick = () => {
+    disconnectHostVoice();
+
+    currentRoom = null;
+
+    showMonitor(false);
+
+    socket.emit('host_register', {
+        host_token: hostToken
+    });
+};
+
+// ========================================
+// CLOSE ROOM
+// ========================================
+
+$('closeRoom').onclick = () => {
+    if (
+        currentRoom &&
+        confirm(`Tutup ${currentRoom}? Semua peserta akan dikeluarkan.`)
+    ) {
+        socket.emit('host_close_room', {
+            room_id: currentRoom,
+            host_token: hostToken
+        });
+    }
+};
+
+socket.on('host_room_closed', data => {
+    disconnectHostVoice();
+
+    currentRoom = null;
+
+    showMonitor(false);
+
+    $('hostStatus').textContent =
+        `${data.room_id} telah ditutup.`;
+});
+
+socket.on('room_closed', data => {
+    if (data.room_id === currentRoom) {
+        disconnectHostVoice();
+
+        $('hostStatus').textContent = data.message;
+
+        currentRoom = null;
+
+        showMonitor(false);
+    }
+});
+
+// ========================================
+// LIVEKIT TOKEN MONITOR
+// ========================================
+
+socket.on('host_voice_tokens', data => {
+    if (!currentRoom || voiceRoomId !== currentRoom) {
+        return;
+    }
+
+    // Backend mengirim token di dalam data.red dan data.blue.
+    // Tidak ada data.room_name di level teratas.
+    if (
+        !data ||
+        !data.url ||
+        !data.red ||
+        !data.red.token ||
+        !data.blue ||
+        !data.blue.token
+    ) {
+        console.error(
+            '[HOST VOICE] Payload token tidak lengkap:',
+            data
+        );
+
+        $('redVoiceStatus').textContent =
+            'Token monitor tidak lengkap.';
+
+        $('blueVoiceStatus').textContent =
+            'Token monitor tidak lengkap.';
+
+        return;
+    }
+
+    hostVoiceTokens = data;
+
+    $('redVoiceStatus').textContent =
+        'Siap memantau Tim Merah';
+
+    $('blueVoiceStatus').textContent =
+        'Siap memantau Tim Biru';
+
+    console.log('[HOST VOICE] Token monitor diterima.');
+});
+
+// ========================================
+// CONNECT HOST VOICE
+// ========================================
+
+async function connectHostVoice(team) {
+    if (!currentRoom || !hostVoiceTokens) {
+        $('hostStatus').textContent =
+            'Token suara belum tersedia. Tunggu beberapa saat.';
+        return;
+    }
+
+    const isRed = team === 'merah';
+
+    const statusElement = isRed
+        ? $('redVoiceStatus')
+        : $('blueVoiceStatus');
+
+    const buttonElement = isRed
+        ? $('redVoiceButton')
+        : $('blueVoiceButton');
+
+    const existingConnection = isRed
+        ? redVoiceConnection
+        : blueVoiceConnection;
+
+    // Klik kedua kali untuk memutus monitor.
+    if (existingConnection) {
+        if (isRed) {
+            redVoiceConnection = null;
+        } else {
+            blueVoiceConnection = null;
+        }
+
+        await existingConnection.disconnect();
+
+        statusElement.textContent = 'Monitor dihentikan.';
+
+        buttonElement.textContent = isRed
+            ? 'Dengarkan Tim Merah'
+            : 'Dengarkan Tim Biru';
+
+        return;
+    }
+
+    if (isRed ? redVoiceBusy : blueVoiceBusy) {
+        return;
+    }
+
+    const roomIdAtStart = currentRoom;
+
+    const tokens = isRed
+        ? hostVoiceTokens.red
+        : hostVoiceTokens.blue;
+
+    if (!tokens || !tokens.token) {
+        statusElement.textContent = 'Token tidak tersedia.';
+        return;
+    }
+
+    if (isRed) {
+        redVoiceBusy = true;
+    } else {
+        blueVoiceBusy = true;
+    }
+
+    statusElement.textContent = 'Menghubungkan...';
+    buttonElement.disabled = true;
+
+    try {
+        const connection = await TacticalVoice.connect({
+            url: hostVoiceTokens.url,
+            token: tokens.token,
+            canPublish: false,
+
+            onStatus: status => {
+                statusElement.textContent = status;
+            },
+
+            onSpeaking: speakers => {
+                if (speakers.length > 0) {
+                    console.log(
+                        `[HOST MONITOR ${team.toUpperCase()}]`,
+                        speakers
+                    );
+                }
+            }
+        });
+
+        // Jangan biarkan koneksi Room lama aktif jika Host pindah Room.
+        if (
+            currentRoom !== roomIdAtStart ||
+            voiceRoomId !== roomIdAtStart
+        ) {
+            await connection.disconnect();
+            return;
+        }
+
+        if (isRed) {
+            redVoiceConnection = connection;
+        } else {
+            blueVoiceConnection = connection;
+        }
+
+        statusElement.textContent =
+            'Terhubung. Mendengarkan suara tim.';
+
+        buttonElement.textContent = isRed
+            ? 'Hentikan Monitor Merah'
+            : 'Hentikan Monitor Biru';
+
+    } catch (error) {
+        console.error('[HOST VOICE ERROR]', error);
+
+        statusElement.textContent =
+            'Gagal terhubung: ' + error.message;
+
+    } finally {
+        if (isRed) {
+            redVoiceBusy = false;
+        } else {
+            blueVoiceBusy = false;
+        }
+
+        buttonElement.disabled = false;
+    }
+}
+
+// ========================================
+// VOICE BUTTONS
+// ========================================
+
+$('redVoiceButton').addEventListener('click', () => {
+    connectHostVoice('merah');
+});
+
+$('blueVoiceButton').addEventListener('click', () => {
+    connectHostVoice('biru');
+});
+
+console.log('[HOST] Dashboard script berhasil dimuat.');
+</script>
+
+</body>
+</html>
