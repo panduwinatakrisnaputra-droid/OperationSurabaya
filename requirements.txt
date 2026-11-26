@@ -7,3 +7,24 @@ supabase
 opencv-contrib-python
 face-recognition
 numpy
+
+#comm-room
+socketio
+livekit
+
+fastapi
+uvicorn[standard]
+python-dotenv
+supabase
+
+# Face Recognition
+opencv-contrib-python
+face-recognition
+face_recognition_models
+numpy
+setuptools==80.9.0
+
+# Communication Room
+python-socketio[asyncio_client]
+livekit
+livekit-api
