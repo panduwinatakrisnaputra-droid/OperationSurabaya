@@ -1,0 +1,16 @@
+.git
+.github
+.gitignore
+.vscode
+.env
+.venv
+venv
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+coba.zip
+main.zip
+main_legacy.py
+operation_surabaya_work/
+freeze_sebelumdowngradeopencv.txt
