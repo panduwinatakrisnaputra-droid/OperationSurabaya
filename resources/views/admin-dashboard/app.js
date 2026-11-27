@@ -139,7 +139,33 @@ function setSubMenuLocked(locked) {
     });
 }
 
+function escapeMatchHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[char]);
+}
+
+function getMatchTeams(match) {
+    if (Array.isArray(match?.team_stats) && match.team_stats.length) {
+        return match.team_stats;
+    }
+    if (Array.isArray(match?.teams) && match.teams.length) {
+        return match.teams;
+    }
+
+    // Fallback untuk match lama yang belum memiliki konfigurasi match_teams.
+    return [
+        { team_code: 'RED', team_name: 'RED TEAM', team_color: '#EF4444', total_players: match?.red_players_count ?? match?.red_players ?? match?.red_count ?? 0 },
+        { team_code: 'BLUE', team_name: 'BLUE TEAM', team_color: '#3B82F6', total_players: match?.blue_players_count ?? match?.blue_players ?? match?.blue_count ?? 0 }
+    ].filter(team => Number(team.total_players) > 0 || ['RED', 'BLUE'].includes(team.team_code));
+}
+
 function renderMatchBrowseCards(matches = []) {
+    // Match Browse khusus room yang belum selesai: WAITING dan ACTIVE.
+    matches = (Array.isArray(matches) ? matches : []).filter(match =>
+        ['waiting', 'active'].includes(String(match?.status || 'waiting').toLowerCase())
+    );
+
     const container = document.getElementById('matchBrowseList');
     const countTag = document.getElementById('browseCountTag');
 
@@ -152,8 +178,8 @@ function renderMatchBrowseCards(matches = []) {
     if (!matches.length) {
         container.innerHTML = `
             <div class="browse-empty-box">
-                Belum ada match yang tersedia saat ini.<br>
-                Buat room/match terlebih dahulu lalu klik <strong>↻ REFRESH</strong>.
+                Belum ada room WAITING atau ACTIVE saat ini.<br>
+                Match yang sudah COMPLETED dapat dilihat di menu <strong>MATCH HISTORY</strong>.
             </div>
         `;
         return;
@@ -164,21 +190,23 @@ function renderMatchBrowseCards(matches = []) {
     matches.forEach(match => {
         const statusRaw = (match.status || 'waiting').toLowerCase();
         const isCompleted = statusRaw === 'completed';
+        const statusClass = statusRaw === 'active' ? 'active' : statusRaw === 'waiting' ? 'waiting' : 'completed';
+        const statusLabel = statusRaw === 'active' ? 'ACTIVE' : statusRaw === 'waiting' ? 'WAITING LOBBY' : 'COMPLETED';
+        const teams = getMatchTeams(match);
 
-        const statusClass = statusRaw === 'active'
-            ? 'active'
-            : statusRaw === 'waiting'
-                ? 'waiting'
-                : 'completed';
-
-        const statusLabel = statusRaw === 'active'
-            ? 'ACTIVE'
-            : statusRaw === 'waiting'
-                ? 'WAITING LOBBY'
-                : 'COMPLETED';
-
-        const redCount = match.red_players_count ?? match.red_count ?? '-';
-        const blueCount = match.blue_players_count ?? match.blue_count ?? '-';
+        const teamsMarkup = teams.map((team, index) => {
+            const name = team.team_name || team.name || `${team.team_code || `TEAM ${index + 1}`} TEAM`;
+            const count = Number(team.total_players ?? team.players_count ?? team.player_count ?? team.players?.length ?? 0);
+            const capacity = team.capacity == null ? '' : ` / ${Number(team.capacity)}`;
+            const colorCandidate = String(team.team_color || team.color || '#A3E635');
+            const color = /^#[0-9a-fA-F]{3,8}$/.test(colorCandidate) ? colorCandidate : '#A3E635';
+            return `
+                <div class="match-card-team" title="${escapeMatchHtml(name)}">
+                    <span>FACTION ${String(index + 1).padStart(2, '0')}</span>
+                    <strong style="color:${color};">${escapeMatchHtml(name)} (${count}${capacity})</strong>
+                </div>
+            `;
+        }).join('');
 
         const card = document.createElement('div');
         card.className = 'match-browse-card';
@@ -187,36 +215,26 @@ function renderMatchBrowseCards(matches = []) {
                 <div class="match-card-top">
                     <div>
                         <small style="font:9px 'DM Mono',monospace;color:var(--muted);">OPERATION MATCH</small>
-                        <div class="match-card-title">${match.match_name || 'Unnamed Match'}</div>
-                        <div class="match-card-id">ID: ${match.id}</div>
+                        <div class="match-card-title">${escapeMatchHtml(match.match_name || match.name || 'Unnamed Match')}</div>
+                        <div class="match-card-id">ID: ${escapeMatchHtml(match.id)}</div>
                     </div>
                     <span class="match-status-pill ${statusClass}">${statusLabel}</span>
                 </div>
 
                 <div class="match-card-teams" style="margin-top:12px;">
-                    <div>
-                        <span>FACTION 01</span>
-                        <strong style="color:var(--red);">RED TEAM (${redCount})</strong>
-                    </div>
-                    <div>
-                        <span>FACTION 02</span>
-                        <strong style="color:var(--blue);">BLUE TEAM (${blueCount})</strong>
-                    </div>
+                    ${teamsMarkup || '<div class="match-card-team"><span>TEAMS</span><strong>Belum ada konfigurasi tim</strong></div>'}
                 </div>
             </div>
 
             <button type="button" class="btn-enter-match ${isCompleted ? 'summary-mode' : ''}">
-                ${isCompleted ? '📊 VIEW MATCH SUMMARY' : '▶ ENTER MATCH'}
+                ▶ ENTER MATCH
             </button>
         `;
 
         const enterBtn = card.querySelector('.btn-enter-match');
         enterBtn.addEventListener('click', () => {
-            if (isCompleted) {
-                openPostMatchSummary(match);
-            } else {
-                enterMatchWorkspace(match);
-            }
+            if (isCompleted) openPostMatchSummary(match);
+            else enterMatchWorkspace(match);
         });
 
         container.appendChild(card);
@@ -1065,18 +1083,22 @@ async function refreshDashboard() {
         }
 
         if (allMatchesRes.status === 'fulfilled') {
-            const rawList = Array.isArray(allMatchesRes.value?.data)
-                ? allMatchesRes.value.data
-                : Array.isArray(allMatchesRes.value?.matches)
-                    ? allMatchesRes.value.matches
-                    : Array.isArray(allMatchesRes.value)
-                        ? allMatchesRes.value
-                        : [];
+            // Endpoint /history mengembalikan { success, history: [...] }.
+            const rawList = Array.isArray(allMatchesRes.value?.history)
+                ? allMatchesRes.value.history
+                : Array.isArray(allMatchesRes.value?.data)
+                    ? allMatchesRes.value.data
+                    : Array.isArray(allMatchesRes.value?.matches)
+                        ? allMatchesRes.value.matches
+                        : Array.isArray(allMatchesRes.value)
+                            ? allMatchesRes.value
+                            : [];
 
             rawList.forEach(m => {
-                if (m && m.id && !matchMap.has(m.id)) {
-                    matchMap.set(m.id, m);
-                }
+                if (!m || !m.id) return;
+                // Gabungkan data /history ke record /current agar team_stats dari
+                // history tidak hilang ketika keduanya merujuk match yang sama.
+                matchMap.set(m.id, { ...(matchMap.get(m.id) || {}), ...m });
             });
         }
 
@@ -1093,12 +1115,22 @@ async function refreshDashboard() {
                 api(`/api/matches/${activeMatch.id}/events`)
             ]);
 
-            const redPlayersList = lobbyResult.lobby?.red_team?.players || [];
-            const bluePlayersList = lobbyResult.lobby?.blue_team?.players || [];
+            // Lobby merupakan sumber kondisi anggota tim terkini untuk match yang sedang dibuka.
+            const liveTeams = Array.isArray(lobbyResult.lobby?.teams) ? lobbyResult.lobby.teams : [];
+            activeMatch.team_stats = liveTeams.map(team => ({
+                team_id: team.id,
+                team_code: team.team_code,
+                team_name: team.team_name,
+                team_color: team.team_color,
+                total_players: Number(team.total ?? team.total_players ?? team.players?.length ?? 0),
+                capacity: team.capacity
+            }));
+            activeMatch.total_players = Number(lobbyResult.lobby?.total_players ?? activeMatch.total_players ?? 0);
+            activeMatch.red_players_count = activeMatch.team_stats.find(team => team.team_code === 'RED')?.total_players ?? 0;
+            activeMatch.blue_players_count = activeMatch.team_stats.find(team => team.team_code === 'BLUE')?.total_players ?? 0;
 
-            activeMatch.red_players_count = redPlayersList.length;
-            activeMatch.blue_players_count = bluePlayersList.length;
-
+            // Match Browse hanya menampilkan WAITING dan ACTIVE.
+            // COMPLETED ditampilkan terpisah pada halaman Match History.
             renderMatchBrowseCards(browsedMatches);
 
             // Jika admin berada di halaman Match Browse atau Post-Match Summary, jangan masuk ke workspace aktif

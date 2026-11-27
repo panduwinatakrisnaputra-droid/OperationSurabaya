@@ -117,12 +117,34 @@ def get_match_history():
                 except (ValueError, TypeError):
                     duration_seconds = None
 
-            configured = supabase.table("match_teams").select("team_id,capacity,teams(team_code,team_name,team_color)").eq("match_id", match_id).execute().data or []
+            configured = (
+                supabase.table("match_teams")
+                .select("team_id,capacity,team_order,teams(id,team_code,team_name,team_color)")
+                .eq("match_id", match_id)
+                .order("team_order")
+                .execute().data or []
+            )
+            # Hitung berdasarkan team_id, bukan nama/kode tim, agar konfigurasi
+            # tim per-match tetap akurat dan tidak bergantung pada RED/BLUE.
+            team_member_counts = {}
+            for member in match_members:
+                team_id = member.get("team_id")
+                if team_id:
+                    team_member_counts[team_id] = team_member_counts.get(team_id, 0) + 1
+
             team_stats = []
             for config in configured:
                 team_info = config.get("teams") or {}
-                team_count = sum(1 for member in match_members if team_map.get(member.get("team_id")) == team_info.get("team_code"))
-                team_stats.append({**team_info, "total_players": team_count, "capacity": config.get("capacity")})
+                team_id = config.get("team_id")
+                team_stats.append({
+                    "team_id": team_id,
+                    "team_code": team_info.get("team_code"),
+                    "team_name": team_info.get("team_name"),
+                    "team_color": team_info.get("team_color"),
+                    "total_players": team_member_counts.get(team_id, 0),
+                    "capacity": config.get("capacity"),
+                    "team_order": config.get("team_order")
+                })
 
             history.append({
                 **match,
@@ -136,6 +158,8 @@ def get_match_history():
                 "total_players": len(match_members),
                 "red_players": red_players,
                 "blue_players": blue_players,
+                "red_players_count": red_players,
+                "blue_players_count": blue_players,
                 "total_shots": total_shots,
                 "total_events": len(match_events)
             })

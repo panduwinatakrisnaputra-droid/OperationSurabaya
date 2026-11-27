@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -5,35 +6,40 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OPERATION: SURABAYA — Match History</title>
     <link rel="stylesheet" href="style.css?v=4">
+
     <style>
+        /* HISTORY LIST */
         .history-list {
             display: grid;
             gap: 10px;
             margin-top: 12px;
         }
+
         .history-item {
             display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: space-between;
+            flex-direction: column;
+            align-items: stretch;
             gap: 12px;
-            padding: 13px 16px;
+            padding: 13px 14px;
             border: 1px solid var(--line);
             background: #0d151e;
             transition: border-color 0.2s ease, background 0.2s ease;
         }
+
         .history-item.selected {
             border-color: var(--lime);
             background: #111d26;
         }
+
         .history-meta {
             display: flex;
             flex-wrap: wrap;
-            gap: 14px;
+            gap: 8px 14px;
             font: 11px 'DM Mono', monospace;
             color: var(--muted);
             margin-top: 5px;
         }
+
         .badge-status {
             display: inline-block;
             padding: 2px 7px;
@@ -41,17 +47,210 @@
             border: 1px solid var(--line);
             margin-left: 8px;
         }
-        .badge-completed { color: var(--lime); border-color: var(--lime); }
-        .badge-active { color: #f0b84b; border-color: #f0b84b; }
-        .badge-waiting { color: var(--muted); }
+
+        .badge-completed {
+            color: var(--lime);
+            border-color: var(--lime);
+        }
+
+        .badge-active {
+            color: #f0b84b;
+            border-color: #f0b84b;
+        }
+
+        .badge-waiting {
+            color: var(--muted);
+        }
+
+        /* MAIN TWO COLUMN LAYOUT */
+        .history-workspace {
+            display: grid;
+            grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.8fr);
+            gap: 16px;
+            align-items: start;
+            margin-top: 18px;
+        }
+
+        /* LEFT PANEL */
+        .history-sidebar {
+            position: sticky;
+            top: 18px;
+            max-height: calc(100vh - 36px);
+            overflow-y: auto;
+            min-width: 0;
+        }
+
+        .history-sidebar::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .history-sidebar::-webkit-scrollbar-thumb {
+            background: var(--line);
+        }
+
+        .history-sidebar .panel-head {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #0d151e;
+            padding-bottom: 12px;
+        }
+
+        /* RIGHT PANEL */
+        .history-detail {
+            display: grid;
+            gap: 14px;
+            min-width: 0;
+        }
+
+        .history-detail .control-strip {
+            margin: 0;
+        }
+
+        /* MATCH OVERVIEW */
+        .match-overview {
+            margin: 0;
+            border: 1px solid var(--line);
+            background: #0d151e;
+            padding: 18px;
+            min-width: 0;
+        }
+
+        .overview-hero {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+            padding: 18px;
+            border: 1px solid var(--line);
+            background: linear-gradient(120deg, #142431, #101820);
+        }
+
+        .overview-winner-label {
+            color: var(--muted);
+            font: 10px 'DM Mono', monospace;
+            letter-spacing: 1.5px;
+        }
+
+        .overview-winner-name {
+            margin: 6px 0 0;
+            font-size: clamp(22px, 4vw, 34px);
+            letter-spacing: 1px;
+        }
+
+        .overview-result-tag {
+            color: var(--lime);
+            border: 1px solid var(--lime);
+            padding: 6px 10px;
+            font: 700 10px 'DM Mono', monospace;
+        }
+
+        .overview-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .overview-metric {
+            border: 1px solid var(--line);
+            background: #101a24;
+            padding: 13px;
+        }
+
+        .overview-metric small {
+            display: block;
+            color: var(--muted);
+            font: 9px 'DM Mono', monospace;
+        }
+
+        .overview-metric strong {
+            display: block;
+            margin-top: 7px;
+            font-size: 21px;
+        }
+
+        /* TEAM REPORT */
         .report-teams-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 16px;
-            margin-top: 16px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 10px;
+            margin: 0;
         }
+
+        .overview-team {
+            border: 1px solid var(--line);
+            border-left: 3px solid var(--team-color, var(--lime));
+            padding: 12px;
+            background: #101a24;
+        }
+
+        .overview-team.winner {
+            border-color: var(--team-color, var(--lime));
+        }
+
+        .overview-team h3 {
+            margin: 0 0 10px;
+            font-size: 13px;
+        }
+
+        .overview-team-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .overview-team-stats span {
+            color: var(--muted);
+            font: 9px 'DM Mono', monospace;
+        }
+
+        .overview-team-stats b {
+            display: block;
+            color: var(--text);
+            font-size: 15px;
+            margin-top: 4px;
+        }
+
+        /* ANALYTICS & LOGS */
+        .history-detail .lower-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 14px;
+            margin: 0;
+        }
+
+        .history-detail .analytics,
+        .history-detail .logs {
+            min-width: 0;
+        }
+
         .report-divider {
             margin-top: 22px;
+        }
+
+        /* RESPONSIVE */
+        @media (max-width: 1050px) {
+            .history-workspace {
+                grid-template-columns: minmax(250px, 0.85fr) minmax(0, 1.5fr);
+            }
+        }
+
+        @media (max-width: 780px) {
+            .history-workspace {
+                grid-template-columns: 1fr;
+            }
+
+            .history-sidebar {
+                position: relative;
+                top: 0;
+                max-height: 350px;
+            }
+
+            .history-detail .lower-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -68,7 +267,6 @@
 
         <div class="nav-label">OPERATIONS</div>
         <a class="nav" href="index.html#overview">▦ <span>Overview</span></a>
-        <a class="nav" href="index.html#map">⌖ <span>Field Map</span></a>
         <a class="nav active" href="history.html">↺ <span>Match History</span></a>
 
         <div class="side-bottom">
@@ -81,6 +279,8 @@
     </aside>
 
     <main class="main">
+
+        <!-- HEADER -->
         <header class="topbar">
             <div>
                 <p class="eyebrow">COMBAT ARCHIVE / POST-MATCH RECORDS</p>
@@ -88,79 +288,149 @@
             </div>
 
             <div class="top-actions">
-                <a class="btn start" href="index.html" style="text-decoration:none;">← LIVE DASHBOARD</a>
+                <a class="btn start" href="index.html" style="text-decoration:none;">
+                    ← LIVE DASHBOARD
+                </a>
                 <span class="date">FIELD OPS · 2026</span>
             </div>
         </header>
 
-        <!-- DAFTAR SELURUH RIWAYAT PERTANDINGAN -->
-        <section class="panel" id="archiveListSection">
-            <div class="panel-head">
-                <div>
-                    <small>STORED SESSIONS IN SUPABASE</small>
-                    <h2>DAFTAR RIWAYAT PERTANDINGAN</h2>
-                </div>
-                <span class="muted-tag" id="historyCountTag">0 MATCHES</span>
-            </div>
 
-            <div id="historyList" class="history-list">
-                <div class="chart-empty">Memuat riwayat pertandingan...</div>
-            </div>
-        </section>
+        <!-- MATCH HISTORY WORKSPACE -->
+        <div class="history-workspace">
 
-        <!-- DETAIL LAPORAN PERTANDINGAN TERPILIH -->
-        <section class="control-strip report-divider">
-            <div>
-                <small>SELECTED MATCH REPORT</small>
-                <strong id="selectedMatchTitle">BELUM ADA PERTANDINGAN DIPILIH</strong>
-            </div>
+            <!-- LEFT: COMPLETED MATCH LIST -->
+            <aside class="panel history-sidebar" id="archiveListSection">
 
-            <div class="control-buttons">
-                <span class="muted-tag" id="selectedMatchMeta">—</span>
-            </div>
-        </section>
-
-        <section class="report-teams-grid" id="reportTeams">
-            <div class="chart-empty">Pilih pertandingan untuk melihat komposisi tim.</div>
-        </section>
-
-        <section class="lower-grid">
-            <div class="panel analytics" id="analytics">
                 <div class="panel-head">
                     <div>
-                        <small>POST-MATCH PERFORMANCE</small>
-                        <h2>PLAYER ANALYTICS</h2>
+                        <small>COMPLETED MATCHES · ARCHIVED SESSIONS</small>
+                        <h2>DAFTAR MATCH</h2>
                     </div>
-                    <span class="muted-tag" id="analyticsStatus">WAITING DATA</span>
+
+                    <span class="muted-tag" id="historyCountTag">
+                        0 MATCHES
+                    </span>
                 </div>
 
-                <div id="playerAnalyticsList" class="player-analytics-list">
+                <div id="historyList" class="history-list">
                     <div class="chart-empty">
-                        Pilih pertandingan di atas untuk melihat statistik pemain.
+                        Memuat riwayat pertandingan...
                     </div>
                 </div>
-            </div>
 
-            <div class="panel logs" id="logs">
-                <div class="panel-head">
+            </aside>
+
+
+            <!-- RIGHT: MATCH REPORT -->
+            <main class="history-detail">
+
+                <!-- SELECTED MATCH -->
+                <section class="control-strip">
                     <div>
-                        <small>RECORDED ACTIVITY STREAM</small>
-                        <h2>EVENT LOG</h2>
+                        <small>SELECTED MATCH REPORT</small>
+                        <strong id="selectedMatchTitle">
+                            BELUM ADA PERTANDINGAN DIPILIH
+                        </strong>
                     </div>
 
-                    <div class="log-actions">
-                        <span class="muted-tag" id="eventCountTag">0 EVENTS</span>
+                    <div class="control-buttons">
+                        <span class="muted-tag" id="selectedMatchMeta">
+                            —
+                        </span>
                     </div>
-                </div>
+                </section>
 
-                <div class="log-empty" id="logEmpty">
-                    Belum ada aktivitas tercatat pada pertandingan ini.
-                </div>
 
-                <div id="logList"></div>
-            </div>
-        </section>
+                <!-- MATCH OVERVIEW -->
+                <section class="panel match-overview"
+                    id="matchOverview"
+                    aria-live="polite">
 
+                    <div class="panel-head">
+                        <div>
+                            <small>POST-MATCH SUMMARY</small>
+                            <h2>MATCH OVERVIEW</h2>
+                        </div>
+
+                        <span class="muted-tag" id="overviewMatchStatus">
+                            NO MATCH SELECTED
+                        </span>
+                    </div>
+
+                    <div id="matchOverviewContent">
+                        <div class="chart-empty">
+                            Pilih pertandingan di sebelah kiri untuk melihat ringkasan hasil.
+                        </div>
+                    </div>
+
+                </section>
+
+
+                <!-- TEAM REPORT -->
+                <section class="report-teams-grid" id="reportTeams">
+                    <div class="chart-empty">
+                        Pilih pertandingan untuk melihat komposisi tim.
+                    </div>
+                </section>
+
+
+                <!-- PLAYER ANALYTICS & EVENT LOG -->
+                <section class="lower-grid">
+
+                    <div class="panel analytics" id="analytics">
+
+                        <div class="panel-head">
+                            <div>
+                                <small>POST-MATCH PERFORMANCE</small>
+                                <h2>PLAYER ANALYTICS</h2>
+                            </div>
+
+                            <span class="muted-tag" id="analyticsStatus">
+                                WAITING DATA
+                            </span>
+                        </div>
+
+                        <div id="playerAnalyticsList" class="player-analytics-list">
+                            <div class="chart-empty">
+                                Pilih pertandingan untuk melihat statistik pemain.
+                            </div>
+                        </div>
+
+                    </div>
+
+
+                    <div class="panel logs" id="logs">
+
+                        <div class="panel-head">
+                            <div>
+                                <small>RECORDED ACTIVITY STREAM</small>
+                                <h2>EVENT LOG</h2>
+                            </div>
+
+                            <div class="log-actions">
+                                <span class="muted-tag" id="eventCountTag">
+                                    0 EVENTS
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="log-empty" id="logEmpty">
+                            Belum ada aktivitas tercatat pada pertandingan ini.
+                        </div>
+
+                        <div id="logList"></div>
+
+                    </div>
+
+                </section>
+
+            </main>
+
+        </div>
+
+
+        <!-- DATABASE STATUS -->
         <section class="system-row">
             <div>
                 <span class="sys-icon">◈</span>
@@ -172,10 +442,13 @@
             </div>
         </section>
 
+
+        <!-- FOOTER -->
         <footer>
             FIELD OPS COMMAND CENTER · ARCHIVE MODULE
             <span>MATCH HISTORY DASHBOARD</span>
         </footer>
+
     </main>
 
     <script src="history.js?v=2"></script>

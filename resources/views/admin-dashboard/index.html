@@ -97,17 +97,28 @@
         }
         .match-card-teams {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
+            grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+            gap: 10px;
             border-top: 1px solid var(--line);
             border-bottom: 1px solid var(--line);
             padding: 10px 0;
             font: 11px 'DM Mono', monospace;
         }
+        .match-card-team {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
         .match-card-teams span {
             display: block;
             font-size: 9px;
             color: var(--muted);
+        }
+        .match-card-team strong {
+            display: block;
+            overflow-wrap: anywhere;
+            line-height: 1.45;
         }
         .btn-enter-match {
             width: 100%;
@@ -659,7 +670,6 @@
             <a class="nav nav-sub disabled-nav" href="#overview" id="navOverview">· <span>Overview</span></a>
             <a class="nav nav-sub disabled-nav" href="#camera" id="navCamera">· <span>Camera</span></a>
         </div>
-        <a class="nav" href="#commsHostSection">🎙 <span>Tactical Comms</span></a>
         <a class="nav" href="history.html">↺ <span>Match History</span></a>
 
         <div class="side-bottom">

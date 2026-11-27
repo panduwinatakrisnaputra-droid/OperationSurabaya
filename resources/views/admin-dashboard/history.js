@@ -298,6 +298,121 @@ function renderEventLog(events = []) {
     });
 }
 
+
+function formatDateTime(value) {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleString('id-ID', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+    });
+}
+
+function renderMatchOverview(match, teams = [], healthMap = new Map(), players = [], events = []) {
+    const root = document.getElementById('matchOverviewContent');
+    const status = document.getElementById('overviewMatchStatus');
+    if (!root) return;
+    root.innerHTML = '';
+
+    const winnerCode = String(match.winner_team_code || match.winner_team || '').toUpperCase();
+    const winnerTeam = teams.find(team => String(team.team_code || '').toUpperCase() === winnerCode);
+    const winnerName = winnerTeam?.team_name || winnerCode || 'PEMENANG BELUM TERCATAT';
+    if (status) status.textContent = String(match.status || 'completed').toUpperCase();
+
+    const hero = document.createElement('div');
+    hero.className = 'overview-hero';
+    const winnerBlock = document.createElement('div');
+    const label = document.createElement('small');
+    label.className = 'overview-winner-label';
+    label.textContent = winnerCode ? 'MATCH WINNER' : 'MATCH RESULT';
+    const name = document.createElement('h2');
+    name.className = 'overview-winner-name';
+    name.textContent = winnerName;
+    winnerBlock.append(label, name);
+    const resultTag = document.createElement('span');
+    resultTag.className = 'overview-result-tag';
+    resultTag.textContent = winnerCode ? 'VICTORY' : 'COMPLETED';
+    hero.append(winnerBlock, resultTag);
+    root.appendChild(hero);
+
+    const totalShots = match.total_shots ?? players.reduce((sum, p) => sum + Number(p.total_shots || 0), 0);
+    const metrics = [
+        ['MATCH DURATION', formatDuration(match.duration_seconds)],
+        ['TOTAL PLAYERS', match.total_players ?? teams.reduce((sum, t) => sum + (t.players?.length || Number(t.total_players || 0)), 0)],
+        ['TOTAL SHOTS', totalShots],
+        ['TOTAL EVENTS', match.total_events ?? events.length],
+        ['STARTED AT', formatDateTime(match.started_at)],
+        ['ENDED AT', formatDateTime(match.ended_at)]
+    ];
+    const metricGrid = document.createElement('div');
+    metricGrid.className = 'overview-metrics';
+    metrics.forEach(([labelText, value]) => {
+        const card = document.createElement('div');
+        card.className = 'overview-metric';
+        const small = document.createElement('small');
+        small.textContent = labelText;
+        const strong = document.createElement('strong');
+        strong.textContent = String(value ?? '-');
+        card.append(small, strong);
+        metricGrid.appendChild(card);
+    });
+    root.appendChild(metricGrid);
+
+    const teamHeading = document.createElement('div');
+    teamHeading.className = 'panel-head';
+    teamHeading.style.marginTop = '18px';
+    const heading = document.createElement('h3');
+    heading.textContent = 'FINAL TEAM STATS';
+    teamHeading.appendChild(heading);
+    root.appendChild(teamHeading);
+
+    const teamGrid = document.createElement('div');
+    teamGrid.className = 'overview-team-grid';
+    if (!teams.length) {
+        const empty = document.createElement('div');
+        empty.className = 'chart-empty';
+        empty.textContent = 'Data tim tidak tersedia untuk pertandingan ini.';
+        teamGrid.appendChild(empty);
+    }
+
+    teams.forEach(team => {
+        const code = String(team.team_code || '').toUpperCase();
+        const teamPlayers = team.players || [];
+        const playerIds = teamPlayers.map(item => item.player?.id).filter(Boolean);
+        const healthItems = playerIds.map(id => healthMap.get(id)).filter(Boolean);
+        const eliminated = healthItems.filter(item => item.is_eliminated).length;
+        const survivors = healthItems.length ? healthItems.length - eliminated : '—';
+        const teamAnalytics = players.filter(player => String(player.team_code || player.team || '').toUpperCase() === code);
+        const kills = teamAnalytics.reduce((sum, player) => sum + Number(player.total_hit_given || 0), 0);
+        const shots = teamAnalytics.reduce((sum, player) => sum + Number(player.total_shots || 0), 0);
+
+        const card = document.createElement('article');
+        card.className = `overview-team ${winnerCode && code === winnerCode ? 'winner' : ''}`;
+        card.style.setProperty('--team-color', team.team_color || '#94A3B8');
+        const title = document.createElement('h3');
+        title.textContent = `${team.team_name || code || 'TEAM'}${winnerCode && code === winnerCode ? ' · WINNER' : ''}`;
+        const stats = document.createElement('div');
+        stats.className = 'overview-team-stats';
+        [
+            ['PLAYERS', teamPlayers.length || team.total_players || 0],
+            ['SURVIVED', survivors],
+            ['HIT GIVEN', teamAnalytics.length ? kills : '—']
+        ].forEach(([labelText, value]) => {
+            const item = document.createElement('div');
+            const label = document.createElement('span');
+            label.textContent = labelText;
+            const strong = document.createElement('b');
+            strong.textContent = String(value);
+            item.append(label, strong);
+            stats.appendChild(item);
+        });
+        card.append(title, stats);
+        teamGrid.appendChild(card);
+    });
+    root.appendChild(teamGrid);
+}
+
 async function loadMatchReport(matchItem, historyList) {
     selectedMatchId = matchItem.id;
     renderHistoryList(historyList);
@@ -326,12 +441,17 @@ async function loadMatchReport(matchItem, historyList) {
         );
 
         const configuredTeams = lobbyResult.lobby?.teams || [];
+        const analyticsPlayers = analyticsResult.players || [];
+        const matchEvents = eventResult.events || [];
+        renderMatchOverview(matchItem, configuredTeams, healthMap, analyticsPlayers, matchEvents);
         renderDynamicReportTeams(configuredTeams, healthMap);
-        renderPlayerAnalytics(analyticsResult.players || [], configuredTeams);
-        renderEventLog(eventResult.events || []);
+        renderPlayerAnalytics(analyticsPlayers, configuredTeams);
+        renderEventLog(matchEvents);
 
     } catch (error) {
         console.error('LOAD REPORT ERROR:', error);
+        const overview = document.getElementById('matchOverviewContent');
+        if (overview) overview.innerHTML = `<div class="chart-empty">Gagal memuat Match Overview: ${String(error.message || error)}</div>`;
     }
 }
 
@@ -347,7 +467,7 @@ function renderHistoryList(historyList = []) {
     container.innerHTML = '';
 
     if (!historyList.length) {
-        container.innerHTML = `<div class="chart-empty">Belum ada riwayat pertandingan tersimpan.</div>`;
+        container.innerHTML = `<div class="chart-empty">Belum ada match berstatus COMPLETED.</div>`;
         return;
     }
 
@@ -379,7 +499,7 @@ function renderHistoryList(historyList = []) {
             <div class="history-meta">
                 <span>WAKTU: ${createdDate}</span>
                 <span>DURASI: ${formatDuration(item.duration_seconds)}</span>
-                <span>PEMAIN: ${item.total_players} (R:${item.red_players} / B:${item.blue_players})</span>
+                <span>PEMAIN: ${item.total_players ?? 0}</span>
                 <span>TEMBAKAN: ${item.total_shots}</span>
                 <span>EVENTS: ${item.total_events}</span>
             </div>
@@ -403,7 +523,8 @@ function renderHistoryList(historyList = []) {
 async function initHistoryPage() {
     try {
         const result = await api('/api/matches/history');
-        const historyList = result.history || [];
+        const historyList = (Array.isArray(result.history) ? result.history : [])
+            .filter(item => String(item?.status || '').toLowerCase() === 'completed');
 
         setDatabaseStatus(true, 'Supabase PostgreSQL terhubung');
 

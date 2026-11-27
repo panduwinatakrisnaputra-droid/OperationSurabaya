@@ -23,6 +23,85 @@ SHOOT_COOLDOWN_SECONDS = 1.0
 _last_shot_at = {}  # player_id -> monotonic time tembakan terakhir
 
 
+def _complete_match_if_one_team_alive(match_id: str):
+    """Akhiri match otomatis ketika seluruh pemain kecuali satu tim tereliminasi."""
+    members_response = (
+        supabase.table("match_players")
+        .select("team_id, current_health, is_eliminated, player_status")
+        .eq("match_id", match_id)
+        .execute()
+    )
+    members = members_response.data or []
+    team_states = {}
+    for member in members:
+        team_id = member.get("team_id")
+        if not team_id:
+            continue
+        state = team_states.setdefault(team_id, {"total": 0, "alive": 0})
+        state["total"] += 1
+        hp = member.get("current_health")
+        eliminated = (
+            member.get("is_eliminated") is True
+            or member.get("player_status") == "eliminated"
+            or (hp is not None and hp <= 0)
+        )
+        if not eliminated:
+            state["alive"] += 1
+
+    # Tim tanpa pemain tidak ikut menentukan pemenang.
+    if len(team_states) < 2:
+        return None
+    alive_team_ids = [team_id for team_id, state in team_states.items() if state["alive"] > 0]
+    if len(alive_team_ids) != 1:
+        return None
+
+    winner_team_id = alive_team_ids[0]
+    team_response = (
+        supabase.table("teams")
+        .select("team_code, team_name")
+        .eq("id", winner_team_id)
+        .limit(1)
+        .execute()
+    )
+    team = team_response.data[0] if team_response.data else {}
+    winner_code = team.get("team_code")
+
+    completed_response = (
+        supabase.table("matches")
+        .update({
+            "status": "completed",
+            "ended_at": datetime.now(timezone.utc).isoformat(),
+            "winner_team_code": winner_code,
+        })
+        .eq("id", match_id)
+        .eq("status", "active")
+        .execute()
+    )
+    if not completed_response.data:
+        return None
+
+    try:
+        supabase.table("game_events").insert({
+            "match_id": match_id,
+            "event_type": "match_completed",
+            "description": f"Tim {winner_code or team.get('team_name') or winner_team_id} memenangkan pertandingan setelah seluruh tim lawan tereliminasi",
+            "event_data": {
+                "winner_team_id": winner_team_id,
+                "winner_team_code": winner_code,
+                "reason": "team_elimination",
+            },
+        }).execute()
+    except Exception as error:
+        print("MATCH COMPLETION EVENT ERROR:", repr(error))
+
+    return {
+        "status": "completed",
+        "winner_team_id": winner_team_id,
+        "winner_team_code": winner_code,
+        "reason": "team_elimination",
+    }
+
+
 _detect_frame_counter = 0
 
 def _run_gun_detection(image_b64):
@@ -338,14 +417,23 @@ def update_player_health(match_id: str, data: HealthUpdate):
         if not update_response.data:
             raise Exception("Gagal memperbarui Health Point")
 
+        match_completion = (
+            _complete_match_if_one_team_alive(match_id)
+            if eliminated else None
+        )
+
         return {
             "success": True,
-            "message": "Health pemain berhasil diperbarui",
+            "message": (
+                "Pemain tereliminasi. Pertandingan selesai!"
+                if match_completion else "Health pemain berhasil diperbarui"
+            ),
             "action": data.action,
             "amount": data.amount,
             "current_health": new_hp,
             "max_health": max_hp,
-            "is_eliminated": eliminated
+            "is_eliminated": eliminated,
+            "match_completion": match_completion,
         }
 
     except HTTPException:

@@ -846,3 +846,80 @@ footer {
 .dynamic-mobility-segment { height:100%; min-width:2px; transition:width .25s ease; }
 .mobility-team-stat { display:flex; justify-content:space-between; gap:12px; margin-top:7px; font:10px 'DM Mono',monospace; }
 .mobility-team-stat strong { color:var(--text); white-space:nowrap; }
+
+/* =================================
+   MATCH HISTORY TWO COLUMN LAYOUT
+================================= */
+
+.history-workspace {
+    display: grid;
+    grid-template-columns: minmax(290px, 0.82fr) minmax(0, 1.8fr);
+    gap: 16px;
+    align-items: start;
+    margin-top: 16px;
+}
+
+/* LEFT PANEL */
+
+.history-sidebar {
+    position: sticky;
+    top: 18px;
+    max-height: calc(100vh - 36px);
+    overflow-y: auto;
+    min-width: 0;
+}
+
+.history-sidebar .history-list {
+    margin-top: 12px;
+}
+
+.history-sidebar .history-item {
+    display: grid;
+    gap: 10px;
+    align-items: stretch;
+}
+
+.history-sidebar .history-item > div:first-child {
+    min-width: 0;
+}
+
+.history-sidebar .history-item .btn {
+    width: 100%;
+}
+
+/* RIGHT PANEL */
+
+.history-detail {
+    min-width: 0;
+    display: grid;
+    gap: 14px;
+}
+
+.history-detail .control-strip,
+.history-detail .match-overview,
+.history-detail .report-teams-grid {
+    margin: 0;
+}
+
+.history-detail .lower-grid {
+    margin-top: 0;
+}
+
+/* RESPONSIVE */
+
+@media (max-width: 1050px) {
+    .history-workspace {
+        grid-template-columns: minmax(250px, 0.75fr) minmax(0, 1.4fr);
+    }
+}
+
+@media (max-width: 780px) {
+    .history-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .history-sidebar {
+        position: static;
+        max-height: 380px;
+    }
+}
