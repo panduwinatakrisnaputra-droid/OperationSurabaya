@@ -4,11 +4,11 @@ import uuid
 import socketio
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse, JSONResponse
-from config.config import LIVEKIT_URL
+from config.config import LIVEKIT_URL, CORS_ORIGINS
 from app.Http.Controllers import comms_controller as ctrl
 
 # Instance Async Socket.IO untuk FastAPI
-sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
+sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins=CORS_ORIGINS)
 router = APIRouter(prefix="/comms", tags=["Tactical Comms"])
 
 VIEWS_COMMS_DIR = os.path.join("resources", "views", "comms")
