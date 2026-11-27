@@ -296,9 +296,8 @@
         <div><strong id="baseDefenseNotificationTitle">BASE UNDER ATTACK</strong><p id="baseDefenseNotificationMessage">Tim lawan sedang mencoba menonaktifkan base kalian.</p></div>
         <button type="button" id="closeBaseDefenseNotification" aria-label="Tutup notifikasi">×</button>
       </div>
-
       <div class="gameplay-topbar">
-        <div class="topbar-identity">
+        <div>
           <p class="eyebrow">LIVE OPERATION</p>
           <strong id="gameplayMatchName">OPERATION: SURABAYA</strong>
           <small id="gameplayPlayerInfo">PLAYER · TEAM</small>
@@ -318,99 +317,45 @@
         <video id="gameplayCamera" autoplay playsinline muted></video>
         <div id="crosshair" class="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i><b></b></div>
         <div id="gunBox" class="gun-box hidden"><span id="gunBoxLabel">ENEMY</span></div>
-
-        <!-- TOP OVERLAY: LIVE, TEAM, FULLSCREEN & DRAWER TRIGGER -->
-        <div class="camera-overlay">
-          <div class="overlay-left-group">
-            <span class="camera-live"><i></i> LIVE CAMERA</span>
-            <span id="gameplayTeamBadge" class="team-badge">TEAM</span>
-          </div>
-          <div class="overlay-right-group">
-            <button type="button" id="fullscreenBtn" class="fullscreen-btn" aria-label="Layar penuh">&#x26F6;</button>
-            <button type="button" id="gameActionsToggle" class="game-actions-toggle drawer-trigger-btn" aria-expanded="false" aria-controls="gameplayActionMenu" aria-label="Buka menu aksi dan sesi">
-              <span class="game-actions-icon">☰</span>
-              <span class="game-actions-toggle-label">OPS</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- COMPACT LEFT HUD: HEALTH + WEAPON -->
-        <div class="gameplay-left-panel">
-          <div class="gameplay-health">
-            <div class="health-info"><span>HP</span><strong id="gameplayHealthText">100 / 100 HP</strong></div>
-            <div class="health-bar"><div id="gameplayHealthFill" class="health-fill"></div></div>
-            <div class="health-meta-row">
-              <span id="gameplayHealthStatus" class="health-status">ALIVE</span>
-              <span id="gameplayStatus" class="hud-op-status">ACTIVE</span>
-            </div>
-            <div id="ghostModeIndicator" class="ghost-mode-indicator hidden" aria-live="polite"><span class="ghost-mode-dot"></span> GHOST <strong id="ghostModeCountdown">00:30</strong></div>
-          </div>
-
-          <div class="weapon-hud" id="weaponHud">
-            <div class="weapon-hud-main">
-              <span class="weapon-kicker">WEAPON</span>
-              <strong id="weaponName">TACTICAL RIFLE MK-1</strong>
-              <span id="weaponLevel">LV. 1</span>
-            </div>
-            <div class="weapon-damage">
-              <strong id="weaponDamage">10</strong>
-              <span>DMG</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- RIGHT TARGET PICKER -->
-        <div class="target-picker">
-          <span id="gunStatus" class="gun-status">SCANNING...</span>
-          <select id="targetSelect" aria-label="Pilih target musuh"><option value="">TARGET: -</option></select>
-        </div>
-
-        <!-- NON-OBSTRUCTIVE CAMERA STATUS BAR (WHEN CAMERA INACTIVE) -->
-        <div id="cameraPlaceholder" class="camera-placeholder compact-cam-bar">
-          <div class="compact-cam-copy">
-            <strong class="compact-cam-title"><span class="camera-symbol">◉</span> KAMERA BELUM AKTIF</strong>
-            <p id="cameraMessage">Izinkan akses kamera untuk masuk ke area permainan.</p>
-          </div>
+        <div class="target-picker"><span id="gunStatus" class="gun-status">SCANNING...</span><select id="targetSelect" aria-label="Pilih target musuh"><option value="">TARGET: -</option></select></div>
+        <div id="cameraPlaceholder" class="camera-placeholder">
+          <div class="camera-symbol">◉</div>
+          <strong>KAMERA BELUM AKTIF</strong>
+          <p id="cameraMessage">Izinkan akses kamera untuk masuk ke area permainan.</p>
           <button type="button" id="enableCameraBtn" class="camera-action">AKTIFKAN KAMERA</button>
         </div>
-
-        <!-- SHOOT CONTROL -->
-        <div class="gameplay-controls">
-          <button type="button" id="shootBtn" class="shoot-button">
-            <span class="shoot-icon">◎</span>
-            <span class="shoot-label">FIRE</span>
-          </button>
+        <div class="camera-overlay">
+          <span class="camera-live"><i></i> LIVE CAMERA</span>
+          <span style="display:inline-flex;align-items:center"><span id="gameplayTeamBadge" class="team-badge">TEAM</span><button type="button" id="fullscreenBtn" class="fullscreen-btn" aria-label="Layar penuh">&#x26F6;</button></span>
         </div>
-
-        <!-- SLIDE-OVER DRAWER (ACTIONS + CAMERA + SESSION) -->
-        <div id="gameplayActionDropdown" class="gameplay-action-drawer-wrap">
-          <div id="gameplayDrawerBackdrop" class="gameplay-drawer-backdrop hidden" aria-hidden="true"></div>
-          <aside id="gameplayActionMenu" class="gameplay-action-drawer hidden" aria-label="Panel Aksi dan Sesi">
-            <div class="drawer-head">
-              <div>
-                <span class="drawer-kicker">TACTICAL DRAWER</span>
-                <strong>ACTIONS &amp; SESSION</strong>
-              </div>
-              <button type="button" id="closeGameplayDrawerBtn" class="drawer-close-btn" aria-label="Tutup drawer">×</button>
-            </div>
-
-            <div class="drawer-section">
-              <span class="drawer-section-label">GAME ACTIONS</span>
+        <!-- PLAYER HEALTH + ACTION PANEL -->
+        <div class="gameplay-left-panel">
+          <div class="gameplay-health">
+            <div class="health-info"><span>PLAYER HEALTH</span><strong id="gameplayHealthText">100 / 100 HP</strong></div>
+            <div class="health-bar"><div id="gameplayHealthFill" class="health-fill"></div></div>
+            <span id="gameplayHealthStatus" class="health-status">ALIVE</span>
+            <div id="ghostModeIndicator" class="ghost-mode-indicator hidden" aria-live="polite"><span class="ghost-mode-dot"></span> GHOST MODE <strong id="ghostModeCountdown">00:30</strong></div>
+          </div>
+          <div class="gameplay-action-dropdown" id="gameplayActionDropdown">
+            <button type="button" id="gameActionsToggle" class="game-actions-toggle" aria-expanded="false" aria-controls="gameplayActionMenu">
+              <span class="game-actions-toggle-label"><span class="game-actions-icon">⌘</span> GAME ACTIONS</span>
+              <span class="game-actions-chevron" aria-hidden="true">▾</span>
+            </button>
+            <div class="gameplay-action-menu hidden" id="gameplayActionMenu">
               <div class="gameplay-action-stack">
                 <button type="button" id="scanWeaponQrBtn" class="weapon-scan-button"><span>01</span> SCAN QR UPGRADE</button>
                 <button type="button" id="scanGhostQrBtn" class="ghost-scan-button"><span>02</span> GHOST MODE</button>
                 <button type="button" id="openHealingBtn" class="healing-open-button"><span>03</span> BASE HEALING</button>
                 <button type="button" id="scanBaseShutdownBtn" class="base-shutdown-button"><span>04</span> SHUTDOWN BASE</button>
+                <span id="weaponScanStatus" class="weapon-scan-status" aria-live="polite"></span>
               </div>
-              <span id="weaponScanStatus" class="weapon-scan-status" aria-live="polite"></span>
             </div>
-
-            <div class="drawer-section drawer-session-section">
-              <span class="drawer-section-label">SESSION &amp; CAMERA</span>
-              <button type="button" id="drawerEnableCameraBtn" class="drawer-utility-btn">📷 RELOAD / ENABLE CAM</button>
-              <button type="button" id="gameplayLogoutBtn" class="camera-logout drawer-logout-btn">LOG OUT</button>
-            </div>
-          </aside>
+          </div>
+        </div>
+        <!-- PLAYER WEAPON HUD -->
+        <div class="weapon-hud" id="weaponHud">
+          <div class="weapon-hud-main"><span class="weapon-kicker">EQUIPPED WEAPON</span><strong id="weaponName">TACTICAL RIFLE MK-1</strong><span id="weaponLevel">WEAPON LEVEL 1</span></div>
+          <div class="weapon-damage"><strong id="weaponDamage">10</strong><span>DAMAGE / SHOT</span></div>
         </div>
       </div>
 
@@ -425,9 +370,15 @@
         </div>
       </div>
 
+      <div class="gameplay-controls">
+        <button type="button" id="shootBtn" class="shoot-button">
+          <span class="shoot-icon">◎</span>
+          <span class="shoot-label">FIRE</span>
+        </button>
+      </div>
       <div class="gameplay-footer">
-        <span>HUD MODE · TACTICAL DRAWER</span>
-        <span>TAP [OPS] FOR ACTIONS &amp; LOG OUT</span>
+        <span>OPERATION STATUS <b id="gameplayStatus">ACTIVE</b></span>
+        <button type="button" id="gameplayLogoutBtn" class="camera-logout">LOG OUT</button>
       </div>
     </section>
 

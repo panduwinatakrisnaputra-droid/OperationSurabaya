@@ -811,6 +811,7 @@
   }
 }
 
+
 /* QR WEAPON UPGRADE CONTROL */
 .weapon-scan-button {
   border: 1px solid var(--lime); border-radius: 4px; padding: 7px 9px;
@@ -838,6 +839,7 @@
 .weapon-qr-divider{display:flex;align-items:center;gap:12px;color:#718090;font:10px 'DM Mono';margin:18px 0}.weapon-qr-divider:before,.weapon-qr-divider:after{content:'';height:1px;background:#2b3947;flex:1}.weapon-qr-file-label{display:block;color:#c7f36b;font:10px 'DM Mono';letter-spacing:1px;margin-bottom:8px}.weapon-qr-dialog input[type=file]{display:block;width:100%;color:#aab7c3;font-size:11px;background:#0a1118;border:1px solid #314253;padding:10px}.weapon-qr-modal-status{font-size:11px;line-height:1.5;min-height:18px;color:#c7f36b;margin:14px 0}.weapon-qr-cancel{width:100%;padding:12px;background:transparent;border:1px solid #435365;color:#dce5eb;font:600 10px 'DM Mono';letter-spacing:1px;cursor:pointer}
 @media(max-width:520px){.weapon-qr-dialog{padding:16px}.weapon-qr-head h2{font-size:23px}#weaponQrReader{min-height:190px}}
 
+
 /* GHOST MODE: temporary invulnerability HUD */
 .ghost-scan-button{border:1px solid #77d8ff;border-radius:4px;padding:7px 9px;background:rgba(70,180,255,.16);color:#9be4ff;cursor:pointer;font:700 8px 'DM Mono';letter-spacing:.6px;line-height:1.35;white-space:nowrap;backdrop-filter:blur(3px)}
 .ghost-scan-button:disabled{opacity:.55;cursor:wait}
@@ -848,6 +850,7 @@
 @keyframes ghostPulse{from{opacity:.45}to{opacity:1}}
 @media(max-width:700px){.ghost-scan-button{padding:6px 7px;font-size:7px}}
 
+
 /* BASE HEALING QR + POSE DETECTION MENU */
 .healing-open-button { border-color: rgba(91, 210, 160, .55); color: #9bf0c9; }
 .healing-menu { margin: 14px 0; padding: 16px; border: 1px solid rgba(155,240,201,.35); border-radius: 12px; background: rgba(22,65,51,.32); color: #e9fff4; }
@@ -856,6 +859,7 @@
 .healing-progress { height: 8px; border-radius: 99px; overflow:hidden; background:rgba(255,255,255,.12); margin:12px 0 8px; }
 .healing-progress div { width:0%; height:100%; background:#78e6ad; transition:width .1s linear; }
 #healingCountdown { display:block; color:#9bf0c9; font-size:.75rem; letter-spacing:.1em; }
+
 
 /* =====================================
    GAMEPLAY LEFT ACTION PANEL
@@ -887,6 +891,7 @@
 .base-shutdown-countdown.hidden{display:none!important}
 @media(max-width:700px){.gameplay-left-panel{top:48px;left:8px;width:min(190px,calc(100% - 16px));gap:7px}.gameplay-left-panel .gameplay-health{padding:7px 8px}.gameplay-action-stack{gap:6px}.gameplay-action-stack button{min-height:35px;padding:7px 9px;font-size:8px;gap:8px}.gameplay-action-stack button span{font-size:8px}.gameplay-action-menu{min-width:200px}.game-actions-toggle{min-height:36px;padding:8px 9px;font-size:8px}}
 
+
 /* BASE DEFENSE ALERT: shown to every player on the defending team */
 .base-defense-notification{position:absolute;z-index:120;top:16px;left:50%;transform:translate(-50%,-18px);width:min(560px,calc(100% - 28px));display:flex;align-items:center;gap:13px;padding:14px 16px;border:1px solid rgba(255,105,105,.85);border-left:4px solid #ff5d65;border-radius:7px;background:rgba(35,10,14,.96);color:#fff;box-shadow:0 12px 40px rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .22s ease,transform .22s ease}
 .base-defense-notification.visible{opacity:1;transform:translate(-50%,0);pointer-events:auto}
@@ -896,7 +901,9 @@
 .base-defense-notification button{margin-left:auto;align-self:flex-start;border:0;background:transparent;color:#fff;font-size:22px;cursor:pointer}
 @media(max-width:700px){.base-defense-notification{top:10px;padding:11px 12px;gap:9px}.base-defense-notification p{font-size:9px}.base-defense-notification strong{font-size:10px}}
 
-/* CAMERA DISPLAY FIX */
+
+/* CAMERA DISPLAY FIX: use a centered 16:9 preview instead of showing
+   the camera's native 4:3 frame as a narrow box in the wide stage. */
 .camera-stage {
   display: flex;
   align-items: center;
@@ -914,6 +921,7 @@
   object-position: center;
 }
 
+/* On narrow screens, let the preview use the available stage width. */
 @media (max-width: 700px) {
   #gameplayCamera {
     width: 100%;
@@ -1015,7 +1023,8 @@
 .crosshair.on-target { --ch: #ff3b46; animation: crosshair-lock .45s ease-in-out infinite alternate; }
 @keyframes crosshair-lock { from { transform: translate(-50%, -50%) scale(1); } to { transform: translate(-50%, -50%) scale(1.18); } }
 
-/* ===== FULLSCREEN CAMERA LAYOUT ===== */
+/* ===== FULLSCREEN CAMERA LAYOUT =====
+   Kamera memenuhi seluruh layar; semua HUD melayang di atasnya. */
 .gameplay-panel { background: #000; overflow: hidden; }
 
 .gameplay-panel .camera-stage {
@@ -1038,6 +1047,7 @@
   object-position: center;
   background: #000;
 }
+/* vignette tipis supaya HUD tetap terbaca di atas video terang */
 .gameplay-panel .camera-stage::before,
 .gameplay-panel .camera-stage::after {
   content: "";
@@ -1051,6 +1061,7 @@
 .gameplay-panel .camera-stage::after { bottom: 0; background: linear-gradient(transparent, rgba(3,6,10,.78)); }
 .gameplay-panel .camera-placeholder { z-index: 3; }
 
+/* Top bar & footer menjadi overlay transparan */
 .gameplay-panel .gameplay-topbar {
   position: absolute;
   top: 0; left: 0; right: 0;
@@ -1091,6 +1102,7 @@
   backdrop-filter: blur(3px);
 }
 
+/* Baris status kamera di bawah top bar */
 .gameplay-panel .camera-overlay { top: 66px; left: 12px; right: 12px; z-index: 12; }
 .gameplay-panel .camera-overlay .camera-live,
 .gameplay-panel .camera-overlay .team-badge { background: rgba(5, 10, 15, .5); backdrop-filter: blur(3px); }
@@ -1106,6 +1118,7 @@
 }
 .fullscreen-btn:hover { border-color: var(--lime); color: var(--lime); }
 
+/* Panel kiri, target, HUD senjata, tombol tembak */
 .gameplay-panel .gameplay-left-panel { top: 108px; left: 12px; }
 .gameplay-panel .target-picker { top: 108px; right: 12px; }
 .gameplay-panel .weapon-hud { left: 12px; bottom: 52px; }
@@ -1123,6 +1136,7 @@
   .gameplay-panel .gameplay-controls { right: 12px; bottom: 52px; }
   .gameplay-panel .shoot-button { width: 70px; height: 70px; }
 }
+/* HP rendah di landscape pendek: rapatkan HUD */
 @media (max-height: 460px) {
   .gameplay-panel .gameplay-left-panel { top: 92px; }
   .gameplay-panel .target-picker { top: 92px; }
@@ -1130,353 +1144,39 @@
   .gameplay-panel .gameplay-controls { bottom: 48px; }
 }
 
-/* =====================================
-   CLEAN HUD + SLIDE-OVER DRAWER OVERRIDES
-===================================== */
-.gameplay-panel .gameplay-topbar {
-  min-height: 44px;
-  padding: 6px 12px;
-  gap: 8px;
-}
-.gameplay-panel .gameplay-topbar .eyebrow { display: none; }
-.gameplay-panel .gameplay-topbar strong { font-size: 15px; line-height: 1.05; }
-.gameplay-panel .gameplay-topbar small { margin-top: 2px; font-size: 8px; }
-.gameplay-panel .gameplay-topbar-right {
-  flex-direction: row !important;
-  align-items: center !important;
-  gap: 6px !important;
-}
-.gameplay-panel .match-timer-card {
-  padding: 4px 8px;
-  gap: 0;
-}
-.gameplay-panel .match-timer-card strong { font-size: 14px; line-height: 1.1; }
-.gameplay-panel .match-timer-card small,
-.gameplay-panel .match-timer-card span { display: none; }
-.gameplay-panel .camera-status {
-  padding: 4px 6px;
-  font-size: 7px;
-  max-width: none;
-  background: rgba(5, 10, 15, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-}
-
-.gameplay-panel .camera-overlay {
-  top: 48px;
-  left: 10px;
-  right: 10px;
-  z-index: 12;
-  align-items: center;
-}
-.gameplay-panel .overlay-left-group,
-.gameplay-panel .overlay-right-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  pointer-events: auto;
-}
-.gameplay-panel .fullscreen-btn {
-  margin-left: 0;
-  padding: 5px 8px;
-  font-size: 10px;
-}
-.gameplay-panel .drawer-trigger-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 9px;
-  border-radius: 4px;
-  border: 1px solid rgba(199, 243, 107, 0.75);
-  background: rgba(14, 22, 16, 0.82);
-  color: var(--lime);
-  font: 700 8px 'DM Mono', monospace;
-  letter-spacing: 0.8px;
-  cursor: pointer;
-  backdrop-filter: blur(4px);
-}
-.gameplay-panel .drawer-trigger-btn:hover { background: rgba(34, 52, 26, 0.92); }
-.gameplay-panel .game-actions-icon { font-size: 11px; line-height: 1; }
-
-.gameplay-panel .gameplay-left-panel {
-  position: absolute;
-  top: 82px;
-  left: 10px;
-  bottom: 46px;
-  z-index: 12;
-  width: auto;
-  max-width: min(205px, calc(100% - 105px));
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 8px;
-  pointer-events: none;
-}
-.gameplay-panel .gameplay-left-panel > * { pointer-events: auto; }
-
-.gameplay-panel .gameplay-left-panel .gameplay-health {
-  position: static;
-  transform: none;
-  width: 100%;
-  margin: 0;
-  padding: 7px 9px;
-  background: rgba(5, 10, 15, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-left: 2px solid var(--lime);
-  backdrop-filter: blur(4px);
-  box-shadow: none;
-}
-.gameplay-panel .health-info { margin-bottom: 4px; gap: 6px; }
-.gameplay-panel .health-info span { font-size: 8px; letter-spacing: 1px; }
-.gameplay-panel .health-info strong { font-size: 10px; }
-.gameplay-panel .health-bar { height: 6px; }
-.gameplay-panel .health-meta-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 4px;
-  gap: 6px;
-}
-.gameplay-panel .health-status,
-.gameplay-panel .hud-op-status {
-  margin-top: 0;
-  font: 700 7px 'DM Mono', monospace;
-  letter-spacing: 0.6px;
-}
-.gameplay-panel .hud-op-status { color: var(--lime); }
-
-.gameplay-panel .weapon-hud {
-  position: static;
-  left: auto;
-  bottom: auto;
-  width: 100%;
-  max-width: none;
-  margin: 0;
-  padding: 7px 9px;
-  gap: 8px;
-  background: rgba(5, 10, 15, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-left: 2px solid var(--lime);
-  backdrop-filter: blur(4px);
-  box-shadow: none;
-}
-.gameplay-panel .weapon-hud-main { gap: 1px; }
-.gameplay-panel .weapon-kicker { font-size: 7px; }
-.gameplay-panel .weapon-hud-main strong { font-size: 13px; line-height: 1.1; }
-.gameplay-panel .weapon-hud-main > span:last-child { font-size: 7px; }
-.gameplay-panel .weapon-damage strong { font-size: 16px; line-height: 1; }
-.gameplay-panel .weapon-damage span { font-size: 6px; }
-
-.gameplay-panel .target-picker {
-  top: 82px;
-  right: 10px;
-  z-index: 12;
-  max-width: 145px;
-}
-.gameplay-panel .target-picker select {
-  background: rgba(5, 10, 15, 0.55);
-  backdrop-filter: blur(4px);
-  font-size: 10px;
-  padding: 4px 6px;
-}
-
-.gameplay-panel .camera-placeholder.compact-cam-bar {
-  position: absolute;
-  inset: auto 50% 12px auto;
-  transform: translateX(50%);
-  width: min(430px, calc(100% - 24px));
-  min-height: 0;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px 12px;
-  text-align: left;
-  z-index: 13;
-  background: rgba(8, 13, 19, 0.84);
-  border: 1px solid rgba(199, 243, 107, 0.4);
-  backdrop-filter: blur(6px);
-}
-.gameplay-panel .compact-cam-copy { min-width: 0; }
-.gameplay-panel .compact-cam-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font: 700 12px 'Barlow Condensed', sans-serif !important;
-  letter-spacing: 0.8px;
-}
-.gameplay-panel .compact-cam-title .camera-symbol { font-size: 14px; line-height: 1; }
-.gameplay-panel .camera-placeholder.compact-cam-bar p {
-  margin: 2px 0 0;
-  font-size: 9px;
-  line-height: 1.35;
-  max-width: none;
-}
-.gameplay-panel .camera-placeholder.compact-cam-bar .camera-action {
-  padding: 8px 11px;
-  font-size: 8px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.gameplay-panel .gameplay-controls {
-  position: absolute;
-  right: 14px;
-  left: auto;
-  bottom: 14px;
-  transform: none;
-  z-index: 14;
-}
-.gameplay-panel .shoot-button {
-  width: 62px;
-  height: 62px;
-  background: rgba(199, 243, 107, 0.22);
-  box-shadow: 0 0 0 3px rgba(199, 243, 107, 0.12);
-  backdrop-filter: blur(4px);
-}
-
-.gameplay-panel .gameplay-footer {
-  height: 30px;
-  padding: 0 12px;
-  font-size: 8px;
-  z-index: 18;
-}
-
-/* Backdrop & Slide-Over Drawer */
-.gameplay-drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 39;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(2px);
-}
-.gameplay-action-drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 40;
-  width: min(252px, 40vw);
-  min-width: 215px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 10px;
+/* ===== FIX: FIRE di pojok kanan bawah + menu Game Actions bisa di-scroll ===== */
+.gameplay-panel .gameplay-controls { right: 14px; bottom: 14px; }
+.gameplay-panel .gameplay-footer { z-index: 18; }
+.gameplay-panel .gameplay-action-menu {
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  background: rgba(10, 16, 23, 0.92);
-  border-left: 1px solid rgba(199, 243, 107, 0.4);
-  backdrop-filter: blur(10px);
-  box-shadow: -12px 0 30px rgba(0, 0, 0, 0.55);
+  scrollbar-width: thin;
+  scrollbar-color: var(--lime) transparent;
 }
-.gameplay-action-drawer.hidden { display: none !important; }
+.gameplay-panel .gameplay-action-stack { gap: 5px; }
+.gameplay-panel .gameplay-action-stack button { min-height: 34px; padding: 6px 10px; }
+.gameplay-panel .match-timer-card span { display: none; }
+@media (max-width: 700px) {
+  .gameplay-panel .gameplay-controls { right: 10px; bottom: 10px; }
+}
+@media (max-height: 460px) {
+  .gameplay-panel .gameplay-controls { bottom: 10px; }
+  .gameplay-panel .camera-overlay { top: 62px; }
+}
 
-.drawer-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--line);
-}
-.drawer-kicker {
-  display: block;
-  font: 600 8px 'DM Mono', monospace;
-  letter-spacing: 1.2px;
-  color: var(--lime);
-}
-.drawer-head strong {
-  font: 700 16px 'Barlow Condensed', sans-serif;
-  letter-spacing: 0.6px;
-}
-.drawer-close-btn {
-  width: 26px;
-  height: 26px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text);
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-}
-.drawer-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.drawer-section-label {
-  font: 600 8px 'DM Mono', monospace;
-  letter-spacing: 1px;
-  color: var(--muted);
-}
-.gameplay-action-drawer .gameplay-action-stack {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-.gameplay-action-drawer .gameplay-action-stack button {
-  width: 100%;
-  min-height: 44px;
-  padding: 7px 8px;
-  border-radius: 4px;
-  font: 700 8px 'DM Mono', monospace;
-  letter-spacing: 0.5px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 3px;
-  white-space: normal;
-}
-.gameplay-action-drawer .gameplay-action-stack button:hover { transform: none; }
-.gameplay-action-drawer .weapon-scan-status {
-  display: block;
-  position: static;
-  width: 100%;
-  max-width: 100%;
-  margin-top: 2px;
-  padding: 6px 8px;
-  font-size: 8px;
-}
-.drawer-session-section {
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
-}
-.drawer-utility-btn {
-  width: 100%;
-  padding: 8px 10px;
-  border-radius: 4px;
-  border: 1px solid rgba(199, 243, 107, 0.45);
-  background: rgba(199, 243, 107, 0.1);
-  color: var(--lime);
-  font: 700 8px 'DM Mono', monospace;
-  letter-spacing: 0.8px;
-  text-align: left;
-  cursor: pointer;
-}
-.drawer-logout-btn {
-  position: static !important;
-  transform: none !important;
-  width: 100%;
-  text-align: center;
-  border-color: rgba(239, 68, 68, 0.55);
-  color: #fca5a5;
-  background: rgba(239, 68, 68, 0.08);
-}
-.drawer-logout-btn:hover { background: rgba(239, 68, 68, 0.18); }
-
-/* QR scanner modal safe scroll & sizing */
+/* ===== FIX: modal scanner QR tidak boleh melebihi layar ===== */
 .weapon-qr-modal {
-  align-items: flex-start;
+  align-items: flex-start;          /* jangan center: bagian atas tidak bisa di-scroll bila konten lebih tinggi */
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
 .weapon-qr-dialog {
-  margin: auto;
+  margin: auto;                     /* tetap center bila muat, aman bila tidak muat */
   max-width: 520px;
 }
+/* Scanner persegi: lebarnya dibatasi tinggi layar agar videonya (rasio 1:1) selalu muat */
 .weapon-qr-modal [id$="Reader"] {
   min-height: 0;
   width: min(100%, 52vh);
@@ -1484,17 +1184,6 @@
   margin-right: auto;
 }
 .weapon-qr-modal [id$="Reader"] video { display: block; }
-
-@media (max-width: 700px) {
-  .gameplay-panel .gameplay-topbar { padding: 5px 8px; }
-  .gameplay-panel .gameplay-topbar strong { font-size: 13px; }
-  .gameplay-panel .match-timer-card strong { font-size: 13px; }
-  .gameplay-panel .camera-overlay { top: 42px; left: 8px; right: 8px; }
-  .gameplay-panel .gameplay-left-panel { top: 74px; left: 8px; bottom: 38px; max-width: 170px; }
-  .gameplay-panel .target-picker { top: 74px; right: 8px; max-width: 130px; }
-  .gameplay-panel .shoot-button { width: 54px; height: 54px; }
-  .gameplay-panel .gameplay-controls { right: 10px; bottom: 10px; }
-}
 @media (max-height: 560px) {
   .weapon-qr-modal { padding: 8px; }
   .weapon-qr-dialog { padding: 12px 16px; }
