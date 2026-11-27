@@ -60,3 +60,8 @@ class JoinRoomByCodeRequest(BaseModel):
     room_code: str = Field(min_length=8, max_length=8)
     player_id: str
     team_code: str = Field(pattern="^(RED|BLUE|GREEN|YELLOW)$")
+
+class PlayerMovementRequest(BaseModel):
+    player_id: str
+    latitude: float
+    longitude: float

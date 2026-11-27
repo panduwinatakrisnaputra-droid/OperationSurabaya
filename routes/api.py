@@ -6,6 +6,7 @@ from routes.match_routes import router as match_router
 from routes.room_routes import router as room_router
 from routes.admin_routes import router as admin_router
 from routes.comms_routes import router as comms_router
+from routes.referee_routes import router as referee_router
 
 api_router = APIRouter()
 
@@ -16,3 +17,4 @@ api_router.include_router(match_router)
 api_router.include_router(room_router)
 api_router.include_router(admin_router)
 api_router.include_router(comms_router)
+api_router.include_router(referee_router)

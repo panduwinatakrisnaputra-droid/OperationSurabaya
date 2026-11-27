@@ -1,372 +1,994 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OPERATION: SURABAYA — Command Center</title>
-  <link rel="stylesheet" href="style.css?v=4">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
-  <style>
-    .hidden { display: none !important; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OPERATION: SURABAYA — Command Center</title>
+    <link rel="stylesheet" href="style.css?v=4">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <style>
+        .hidden { display: none !important; }
+        /* Sidebar Sub-Navigation under Match Browse */
+        .nav-sub-group {
+            display: flex;
+            flex-direction: column;
+            border-left: 1px solid var(--line);
+            margin-left: 18px;
+            padding-left: 6px;
+            margin-bottom: 4px;
+        }
+        .nav.nav-sub {
+            padding: 7px 12px;
+            font-size: 12px;
+        }
+        .nav.nav-sub.disabled-nav {
+            opacity: 0.42;
+            cursor: not-allowed;
+        }
 
-    /* Map Container & Dark Tactical Tile Theme */
-    .map-wrapper {
-      position: relative;
-      border: 1px solid var(--line);
-      background: #0a1017;
-      overflow: hidden;
-    }
-    #tacticalMap {
-      width: 100%;
-      height: 275px;
-      background: #0a1017;
-      z-index: 1;
-    }
-    .leaflet-tile-pane {
-      filter: invert(100%) hue-rotate(180deg) brightness(92%) contrast(95%);
-    }
-    .leaflet-control-attribution {
-      background: rgba(10, 16, 23, 0.8) !important;
-      color: var(--muted) !important;
-      font-size: 9px !important;
-    }
-    .leaflet-control-attribution a {
-      color: var(--lime) !important;
-    }
-    .leaflet-popup-content-wrapper,
-    .leaflet-popup-tip {
-      background: #0d151e !important;
-      color: #e6edf3 !important;
-      border: 1px solid var(--line);
-      border-radius: 2px !important;
-      font-family: 'DM Mono', monospace;
-      font-size: 11px;
-    }
+        /* Match Browse View */
+        .browse-section {
+            margin-top: 16px;
+            margin-bottom: 16px;
+        }
+        .browse-container {
+            border: 1px solid var(--line);
+            background: #0d151e;
+            padding: 18px;
+        }
+        .browse-grid {
+            margin-top: 14px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+            gap: 14px;
+        }
+        .match-browse-card {
+            border: 1px solid var(--line);
+            background: #091017;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 14px;
+            transition: border-color 0.2s ease;
+        }
+        .match-browse-card:hover {
+            border-color: var(--lime);
+        }
+        .match-card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .match-card-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #e6edf3;
+            margin-top: 4px;
+        }
+        .match-card-id {
+            font: 10px 'DM Mono', monospace;
+            color: var(--muted);
+            margin-top: 3px;
+        }
+        .match-status-pill {
+            padding: 3px 8px;
+            font: 700 10px 'DM Mono', monospace;
+            border: 1px solid var(--line);
+            color: var(--muted);
+            background: #111a24;
+            white-space: nowrap;
+        }
+        .match-status-pill.active {
+            border-color: var(--lime);
+            color: var(--lime);
+            background: rgba(163, 230, 53, 0.12);
+        }
+        .match-status-pill.waiting {
+            border-color: #eab308;
+            color: #eab308;
+            background: rgba(234, 179, 8, 0.12);
+        }
+        .match-status-pill.completed {
+            border-color: #64748b;
+            color: #94a3b8;
+            background: rgba(100, 116, 139, 0.14);
+        }
+        .match-card-teams {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            border-top: 1px solid var(--line);
+            border-bottom: 1px solid var(--line);
+            padding: 10px 0;
+            font: 11px 'DM Mono', monospace;
+        }
+        .match-card-teams span {
+            display: block;
+            font-size: 9px;
+            color: var(--muted);
+        }
+        .btn-enter-match {
+            width: 100%;
+            background: var(--lime);
+            color: #081006;
+            border: none;
+            padding: 10px 14px;
+            font: 700 12px 'DM Mono', monospace;
+            letter-spacing: 0.8px;
+            cursor: pointer;
+        }
+        .btn-enter-match:hover {
+            filter: brightness(1.08);
+        }
+        .btn-enter-match.summary-mode {
+            background: #16212e;
+            color: #e6edf3;
+            border: 1px solid var(--line);
+        }
+        .btn-enter-match.summary-mode:hover {
+            border-color: var(--lime);
+            color: var(--lime);
+        }
+        .browse-empty-box {
+            grid-column: 1 / -1;
+            border: 1px dashed var(--line);
+            padding: 42px 20px;
+            text-align: center;
+            color: var(--muted);
+            font: 12px 'DM Mono', monospace;
+        }
+        .btn-back-browse {
+            background: #111a24;
+            color: #e6edf3;
+            border: 1px solid var(--line);
+            padding: 8px 12px;
+            font: 700 11px 'DM Mono', monospace;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-back-browse:hover {
+            border-color: var(--lime);
+            color: var(--lime);
+        }
 
-    /* Player & Base Dots */
-    .player-dot-marker {
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      border: 2px solid #ffffff;
-      box-shadow: 0 0 10px currentColor;
-      transition: transform 0.2s ease;
-    }
-    .player-dot-marker.red {
-      background: #ff4d4d;
-      color: #ff4d4d;
-    }
-    .player-dot-marker.blue {
-      background: #3b9eff;
-      color: #3b9eff;
-    }
-    .player-dot-marker.eliminated {
-      background: #5c6773;
-      color: #5c6773;
-      opacity: 0.65;
-    }
-    .player-dot-marker.ghost {
-      box-shadow: 0 0 0 4px rgba(240, 184, 75, 0.45), 0 0 12px #f0b84b;
-      border-color: #f0b84b;
-    }
-    .player-map-label {
-      background: rgba(10, 16, 23, 0.88) !important;
-      border: 1px solid var(--line) !important;
-      color: #e6edf3 !important;
-      font: 700 9px 'DM Mono', monospace !important;
-      padding: 1px 5px !important;
-      box-shadow: none !important;
-    }
-    .player-map-label::before {
-      display: none !important;
-    }
-    .base-square-marker {
-      width: 18px;
-      height: 18px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font: 700 10px 'DM Mono', monospace;
-      color: #fff;
-      border: 1px solid #fff;
-    }
-    .base-square-marker.red { background: rgba(235, 77, 75, 0.9); }
-    .base-square-marker.blue { background: rgba(52, 152, 219, 0.9); }
+        /* Post-Match Full Page Summary (After End Match) */
+        .summary-section {
+            margin-top: 16px;
+            margin-bottom: 16px;
+        }
+        .summary-hero {
+            border: 1px solid var(--line);
+            background: #0d151e;
+            padding: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+        }
+        .summary-hero-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #e6edf3;
+            margin-top: 4px;
+        }
+        .summary-winner-badge {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 5px 12px;
+            font: 700 11px 'DM Mono', monospace;
+            border: 1px solid var(--lime);
+            color: var(--lime);
+            background: rgba(163, 230, 53, 0.12);
+        }
+        .summary-winner-badge.red {
+            border-color: var(--red);
+            color: var(--red);
+            background: rgba(239, 68, 68, 0.14);
+        }
+        .summary-winner-badge.blue {
+            border-color: var(--blue);
+            color: var(--blue);
+            background: rgba(59, 158, 255, 0.14);
+        }
+        .summary-nav-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .btn-summary-primary {
+            background: var(--lime);
+            color: #081006;
+            border: none;
+            padding: 10px 16px;
+            font: 700 11px 'DM Mono', monospace;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-summary-primary:hover {
+            filter: brightness(1.08);
+        }
+        .summary-lock-notice {
+            margin-top: 12px;
+            border: 1px solid rgba(234, 179, 8, 0.35);
+            background: rgba(234, 179, 8, 0.08);
+            color: #eab308;
+            padding: 10px 14px;
+            font: 11px 'DM Mono', monospace;
+        }
+        .summary-teams-grid {
+            margin-top: 16px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 16px;
+        }
+        .summary-team-card {
+            border: 1px solid var(--line);
+            background: #0d151e;
+            padding: 18px;
+        }
+        .summary-team-card.team-red {
+            border-top: 3px solid var(--red);
+        }
+        .summary-team-card.team-blue {
+            border-top: 3px solid var(--blue);
+        }
+        .summary-team-card.team-green {
+            border-top: 3px solid #22c55e;
+        }
+        .summary-team-card.team-yellow {
+            border-top: 3px solid #eab308;
+        }
+        .summary-team-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--line);
+        }
+        .summary-team-header h3 {
+            font-size: 16px;
+            margin: 0;
+        }
+        .summary-kpi-grid {
+            margin-top: 14px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        @media (max-width: 600px) {
+            .summary-kpi-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        .summary-kpi-box {
+            border: 1px solid var(--line);
+            background: #091017;
+            padding: 10px;
+        }
+        .summary-kpi-box small {
+            display: block;
+            font: 9px 'DM Mono', monospace;
+            color: var(--muted);
+        }
+        .summary-kpi-box strong {
+            display: block;
+            font: 700 15px 'DM Mono', monospace;
+            color: #e6edf3;
+            margin-top: 4px;
+        }
+        .summary-roster-section {
+            margin-top: 16px;
+            border: 1px solid var(--line);
+            background: #0d151e;
+            padding: 18px;
+        }
+        .summary-roster-grid {
+            margin-top: 12px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 12px;
+        }
 
-    .map-head-actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .btn-mini {
-      background: #111a24;
-      color: var(--lime);
-      border: 1px solid var(--line);
-      padding: 3px 8px;
-      font: 700 10px 'DM Mono', monospace;
-      cursor: pointer;
-    }
-    .btn-mini:hover {
-      border-color: var(--lime);
-    }
+        /* Map Container & Dark Tactical Tile Theme */
+        .map-wrapper {
+            position: relative;
+            border: 1px solid var(--line);
+            background: #0a1017;
+            overflow: hidden;
+        }
+        #tacticalMap {
+            width: 100%;
+            height: 275px;
+            background: #0a1017;
+            z-index: 1;
+        }
+        .leaflet-tile-pane {
+            filter: invert(100%) hue-rotate(180deg) brightness(92%) contrast(95%);
+        }
+        .leaflet-control-attribution {
+            background: rgba(10, 16, 23, 0.8) !important;
+            color: var(--muted) !important;
+            font-size: 9px !important;
+        }
+        .leaflet-control-attribution a {
+            color: var(--lime) !important;
+        }
+        .leaflet-popup-content-wrapper,
+        .leaflet-popup-tip {
+            background: #0d151e !important;
+            color: #e6edf3 !important;
+            border: 1px solid var(--line);
+            border-radius: 2px !important;
+            font-family: 'DM Mono', monospace;
+            font-size: 11px;
+        }
 
-    /* Overall Distance Bar */
-    .mobility-panel {
-      margin-top: 10px;
-      border: 1px solid var(--line);
-      background: #0d151e;
-      padding: 10px 12px;
-    }
-    .mobility-header {
-      display: flex;
-      justify-content: space-between;
-      font: 9px 'DM Mono', monospace;
-      color: var(--muted);
-      margin-bottom: 6px;
-    }
-    .mobility-teams {
-      display: flex;
-      justify-content: space-between;
-      font: 10px 'DM Mono', monospace;
-    }
-    .mobility-teams strong {
-      display: block;
-      font-size: 13px;
-      margin-top: 2px;
-    }
-    .mobility-bar-track {
-      display: flex;
-      height: 6px;
-      background: #1d2733;
-      border-radius: 6px;
-      overflow: hidden;
-      margin-top: 8px;
-    }
-    .mobility-bar-red {
-      background: var(--red);
-      height: 100%;
-      transition: width 0.35s ease;
-    }
-    .mobility-bar-blue {
-      background: var(--blue);
-      height: 100%;
-      transition: width 0.35s ease;
-    }
-  </style>
+        /* Player & Base Dots */
+        .player-dot-marker {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 2px solid #ffffff;
+            box-shadow: 0 0 10px currentColor;
+            transition: transform 0.2s ease;
+        }
+        .player-dot-marker.red {
+            background: #ff4d4d;
+            color: #ff4d4d;
+        }
+        .player-dot-marker.blue {
+            background: #3b9eff;
+            color: #3b9eff;
+        }
+        .player-dot-marker.eliminated {
+            background: #5c6773;
+            color: #5c6773;
+            opacity: 0.65;
+        }
+        .player-dot-marker.ghost {
+            box-shadow: 0 0 0 4px rgba(240, 184, 75, 0.45), 0 0 12px #f0b84b;
+            border-color: #f0b84b;
+        }
+        .player-map-label {
+            background: rgba(10, 16, 23, 0.88) !important;
+            border: 1px solid var(--line) !important;
+            color: #e6edf3 !important;
+            font: 700 9px 'DM Mono', monospace !important;
+            padding: 1px 5px !important;
+            box-shadow: none !important;
+        }
+        .player-map-label::before {
+            display: none !important;
+        }
+        .base-square-marker {
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font: 700 10px 'DM Mono', monospace;
+            color: #fff;
+            border: 1px solid #fff;
+        }
+        .base-square-marker.red { background: rgba(235, 77, 75, 0.9); }
+        .base-square-marker.blue { background: rgba(52, 152, 219, 0.9); }
+
+        .map-head-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-mini {
+            background: #111a24;
+            color: var(--lime);
+            border: 1px solid var(--line);
+            padding: 3px 8px;
+            font: 700 10px 'DM Mono', monospace;
+            cursor: pointer;
+        }
+        .btn-mini:hover {
+            border-color: var(--lime);
+        }
+
+        /* Overall Distance Bar */
+        .mobility-panel {
+            margin-top: 10px;
+            border: 1px solid var(--line);
+            background: #0d151e;
+            padding: 10px 12px;
+        }
+        .mobility-header {
+            display: flex;
+            justify-content: space-between;
+            font: 9px 'DM Mono', monospace;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+        .mobility-teams {
+            display: flex;
+            justify-content: space-between;
+            font: 10px 'DM Mono', monospace;
+        }
+        .mobility-teams strong {
+            display: block;
+            font-size: 13px;
+            margin-top: 2px;
+        }
+        .mobility-bar-track {
+            display: flex;
+            height: 6px;
+            background: #1d2733;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        .mobility-bar-red {
+            background: var(--red);
+            height: 100%;
+            transition: width 0.35s ease;
+        }
+        .mobility-bar-blue {
+            background: var(--blue);
+            height: 100%;
+            transition: width 0.35s ease;
+        }
+
+        /* Dedicated Multi-Camera Referee View */
+        .camera-section {
+            margin-top: 16px;
+            margin-bottom: 16px;
+        }
+        .camera-grid {
+            display: grid;
+            grid-template-columns: 310px 1fr;
+            gap: 16px;
+            align-items: start;
+        }
+        @media (max-width: 960px) {
+            .camera-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .camera-selector-panel,
+        .camera-monitor-panel {
+            border: 1px solid var(--line);
+            background: #0d151e;
+            padding: 16px;
+        }
+        .camera-list-select {
+            width: 100%;
+            margin-top: 12px;
+            background: #091017;
+            color: #e6edf3;
+            border: 1px solid var(--line);
+            font: 600 12px 'DM Mono', monospace;
+            padding: 6px;
+            outline: none;
+        }
+        .camera-list-select option {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+        }
+        .camera-list-select option:checked:not(:disabled) {
+            background: rgba(163, 230, 53, 0.2);
+            color: var(--lime);
+        }
+        .camera-list-select option:disabled {
+            color: #4f5d6e;
+            background: #070b10;
+            cursor: not-allowed;
+        }
+        .camera-confirm-footer {
+            margin-top: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .camera-selected-hint {
+            font: 11px 'DM Mono', monospace;
+            color: var(--muted);
+        }
+        .btn-confirm-cam {
+            width: 100%;
+            background: var(--lime);
+            color: #081006;
+            border: none;
+            padding: 10px 14px;
+            font: 700 12px 'DM Mono', monospace;
+            letter-spacing: 1px;
+            cursor: pointer;
+        }
+        .btn-confirm-cam:hover:not(:disabled) {
+            filter: brightness(1.08);
+        }
+        .btn-confirm-cam:disabled {
+            background: #1f2933;
+            color: #64748b;
+            cursor: not-allowed;
+        }
+        .camera-badge-pill {
+            display: inline-block;
+            padding: 3px 8px;
+            font: 700 10px 'DM Mono', monospace;
+            border: 1px solid var(--lime);
+            color: var(--lime);
+            background: rgba(163, 230, 53, 0.12);
+        }
+        .camera-badge-pill.team-red {
+            border-color: var(--red);
+            color: var(--red);
+            background: rgba(239, 68, 68, 0.14);
+        }
+        .camera-badge-pill.team-blue {
+            border-color: var(--blue);
+            color: var(--blue);
+            background: rgba(59, 158, 255, 0.14);
+        }
+        .camera-badge-pill.team-green {
+            border-color: #22c55e;
+            color: #22c55e;
+            background: rgba(34, 197, 94, 0.14);
+        }
+        .camera-badge-pill.team-yellow {
+            border-color: #eab308;
+            color: #eab308;
+            background: rgba(234, 179, 8, 0.14);
+        }
+
+        /* Dynamic Grid for 1, 2, or up to 8 Camera Screens */
+        .camera-feeds-grid {
+            margin-top: 12px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+        .camera-feeds-grid.multi-cam {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        @media (max-width: 768px) {
+            .camera-feeds-grid.multi-cam {
+                grid-template-columns: 1fr;
+            }
+        }
+        .cam-feed-tile {
+            border: 1px solid var(--line);
+            background: #070c12;
+            display: flex;
+            flex-direction: column;
+        }
+        .cam-tile-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--line);
+            background: #0b121b;
+        }
+        .cam-tile-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .cam-tile-status {
+            font: 700 10px 'DM Mono', monospace;
+            color: var(--muted);
+        }
+        .cam-tile-status.live {
+            color: var(--lime);
+        }
+        .btn-remove-cam {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            padding: 2px 7px;
+            font: 700 10px 'DM Mono', monospace;
+            cursor: pointer;
+        }
+        .btn-remove-cam:hover {
+            background: var(--red);
+            color: #fff;
+        }
+        .camera-screen-wrapper {
+            position: relative;
+            width: 100%;
+            height: 290px;
+            background: #05080c;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .camera-feeds-grid:not(.multi-cam) .camera-screen-wrapper {
+            height: 400px;
+        }
+        .camera-screen-wrapper video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            background: #000;
+        }
+        .camera-empty-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 16px;
+            color: var(--muted);
+            font: 11px 'DM Mono', monospace;
+            pointer-events: none;
+            z-index: 2;
+        }
+        .camera-grid-empty {
+            border: 1px dashed var(--line);
+            padding: 48px 20px;
+            text-align: center;
+            color: var(--muted);
+            font: 12px 'DM Mono', monospace;
+        }
+    </style>
 </head>
 
 <body>
-  <aside class="sidebar">
-    <a class="brand" href="index.html">
-      <span class="brand-mark">F</span>
-      <span>
-        OPERATION: <span class="muted">SURABAYA</span>
-        <small>COMMAND CENTER</small>
-      </span>
-    </a>
+    <aside class="sidebar">
+        <a class="brand" href="index.html">
+            <span class="brand-mark">F</span>
+            <span>
+                OPERATION: <span class="muted">SURABAYA</span>
+                <small>COMMAND CENTER</small>
+            </span>
+        </a>
 
-    <div class="nav-label">OPERATIONS</div>
-    <a class="nav active" href="#overview">▦ <span>Overview</span></a>
-    <a class="nav" href="#map">⌖ <span>Field Map</span></a>
-    <a class="nav" href="#commsHostSection">🎙️ <span>Tactical Comms</span></a>
-    <a class="nav" href="history.html">↺ <span>Match History</span></a>
+        <div class="nav-label">OPERATIONS</div>
+        <a class="nav active" href="#browse" id="navBrowse">☰ <span>Match Browse</span></a>
+        <div class="nav-sub-group" id="matchSubNav">
+            <a class="nav nav-sub disabled-nav" href="#overview" id="navOverview">· <span>Overview</span></a>
+            <a class="nav nav-sub disabled-nav" href="#camera" id="navCamera">· <span>Camera</span></a>
+        </div>
+        <a class="nav" href="#commsHostSection">🎙 <span>Tactical Comms</span></a>
+        <a class="nav" href="history.html">↺ <span>Match History</span></a>
 
-    <div class="side-bottom">
-      <span class="admin-dot"></span>
-      <div>
-        <b>ADMIN CONSOLE</b>
-        <small>LOCAL INTERFACE</small>
-      </div>
-    </div>
-  </aside>
+        <div class="side-bottom">
+            <span class="admin-dot"></span>
+            <div>
+                <b>ADMIN CONSOLE</b>
+                <small>LOCAL INTERFACE</small>
+            </div>
+        </div>
+    </aside>
 
-  <main class="main">
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">TACTICAL MONITORING / COMMAND</p>
-        <h1>COMMAND CENTER</h1>
-      </div>
+    <main class="main">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">TACTICAL MONITORING / COMMAND</p>
+                <h1>COMMAND CENTER</h1>
+            </div>
 
-      <div class="top-actions">
-        <span class="live-tag"><i></i> SYSTEM ONLINE</span>
-        <span class="date">FIELD OPS · 2026</span>
-      </div>
-    </header>
+            <div class="top-actions">
+                <span class="live-tag"><i></i> SYSTEM ONLINE</span>
+                <span class="date">FIELD OPS · 2026</span>
+            </div>
+        </header>
 
-    <section class="control-strip">
-      <div>
-        <small>MISSION CONTROL</small>
-        <strong id="matchState">NO ACTIVE MATCH</strong>
-      </div>
+        <!-- HALAMAN AWAL: MATCH BROWSE -->
+        <section class="browse-section" id="browseView">
+            <div class="browse-container">
+                <div class="panel-head">
+                    <div>
+                        <small>OPERATION SELECTION · PILIH MATCH TERLEBIH DAHULU</small>
+                        <h2>MATCH BROWSE</h2>
+                    </div>
+                    <div class="map-head-actions">
+                        <span class="muted-tag" id="browseCountTag">0 MATCHES</span>
+                        <button type="button" class="btn-mini" id="refreshBrowseBtn">↻ REFRESH</button>
+                    </div>
+                </div>
 
-      <div class="control-buttons">
-        <button class="btn start" id="startBtn">▶ START MATCH</button>
-        <button class="btn stop" id="stopBtn" disabled>■ END MATCH</button>
-        <button class="btn clear-log" id="deleteAllBtn">⌫ HAPUS ALL</button>
-      </div>
-    </section>
+                <div id="matchBrowseList" class="browse-grid">
+                    <div class="browse-empty-box">
+                        Memuat daftar pertandingan...
+                    </div>
+                </div>
+            </div>
+        </section>
 
-    <section class="overview" id="overview">
+        <!-- HALAMAN PENUH POST-MATCH SUMMARY (MUNCUL SETELAH END MATCH) -->
+        <section class="summary-section" id="matchSummaryView" style="display: none;">
+            <div class="summary-hero">
+                <div>
+                    <small style="font:10px 'DM Mono',monospace;color:var(--muted);">POST-MATCH REPORT · MATCH COMPLETED</small>
+                    <div class="summary-hero-title" id="summaryMatchTitle">OPERATION MATCH</div>
+                    <div class="summary-winner-badge" id="summaryWinnerBadge">MATCH COMPLETED</div>
+                </div>
+
+                <div class="summary-nav-actions">
+                    <button type="button" class="btn-back-browse" id="summaryToBrowseBtn">← MATCH BROWSE</button>
+                    <a href="history.html" class="btn-summary-primary">↺ MATCH HISTORY</a>
+                </div>
+            </div>
+
+            <div class="summary-lock-notice">
+                Pertandingan ini telah berakhir. Akses ke <strong>Overview</strong> dan <strong>Camera</strong> telah dikunci secara otomatis.
+            </div>
+
+            <!-- STATISTIK SEMUA TIM -->
+            <div class="summary-teams-grid" id="summaryTeamsGrid"></div>
+
+            <!-- RINCIAN STATISTIK SELURUH PEMAIN -->
+            <div class="summary-roster-section">
+                <div class="panel-head">
+                    <div>
+                        <small>FINAL INDIVIDUAL PERFORMANCE</small>
+                        <h2>STATISTIK PEMAIN SEMUA TIM</h2>
+                    </div>
+                    <span class="muted-tag" id="summaryPlayerCountTag">0 PLAYERS</span>
+                </div>
+
+                <div class="summary-roster-grid" id="summaryPlayersGrid"></div>
+            </div>
+        </section>
+
+        <!-- WORKSPACE MATCH (MUNCUL SETELAH MEMILIH MATCH AKTIF/WAITING DARI MATCH BROWSE) -->
+        <div id="matchWorkspace" style="display: none;">
+            <section class="control-strip">
+                <div>
+                    <small>MISSION CONTROL</small>
+                    <strong id="matchState">NO ACTIVE MATCH</strong>
+                </div>
+
+                <div class="control-buttons">
+                    <button type="button" class="btn-back-browse" id="backToBrowseBtn">← MATCH BROWSE</button>
+                    <button class="btn start" id="startBtn">▶ START MATCH</button>
+                    <button class="btn stop" id="stopBtn" disabled>■ END MATCH</button>
+                    <button class="btn clear-log" id="deleteAllBtn">⌫ HAPUS ALL</button>
+                </div>
+            </section>
+
+            <!-- MENU KHUSUS KAMERA WASIT (MULTI-SCREEN GRID · 8 KAMERA · 4 TIM) -->
+            <section class="camera-section" id="cameraView" style="display: none;">
+                <div class="camera-grid">
+                    <div class="camera-selector-panel">
+                        <div class="panel-head">
+                            <div>
+                                <small>REFEREE UNITS · 8 FEEDS</small>
+                                <h2>DAFTAR KAMERA WASIT</h2>
+                            </div>
+                        </div>
+
+                        <select id="cameraSlotSelect" class="camera-list-select" size="8">
+                            <option value="red-1" data-team="red" data-label="CAMERA 1 · RED TEAM" selected>camera 1 red team</option>
+                            <option value="red-2" data-team="red" data-label="CAMERA 2 · RED TEAM">camera 2 red team</option>
+                            <option value="blue-1" data-team="blue" data-label="CAMERA 1 · BLUE TEAM">camera 1 blue team</option>
+                            <option value="blue-2" data-team="blue" data-label="CAMERA 2 · BLUE TEAM">camera 2 blue team</option>
+                            <option value="green-1" data-team="green" data-label="CAMERA 1 · GREEN TEAM">camera 1 green team</option>
+                            <option value="green-2" data-team="green" data-label="CAMERA 2 · GREEN TEAM">camera 2 green team</option>
+                            <option value="yellow-1" data-team="yellow" data-label="CAMERA 1 · YELLOW TEAM">camera 1 yellow team</option>
+                            <option value="yellow-2" data-team="yellow" data-label="CAMERA 2 · YELLOW TEAM">camera 2 yellow team</option>
+                        </select>
+
+                        <div class="camera-confirm-footer">
+                            <span class="camera-selected-hint" id="selectedCameraText">Pilihan: camera 1 red team</span>
+                            <button type="button" class="btn-confirm-cam" id="confirmCameraBtn">✓ CONFIRM CAMERA</button>
+                        </div>
+                    </div>
+
+                    <div class="camera-monitor-panel">
+                        <div class="panel-head">
+                            <div>
+                                <small>MULTI-SCREEN REFEREE MONITOR</small>
+                                <h2>LIVE CAMERA FEEDS</h2>
+                            </div>
+                            <div class="map-head-actions">
+                                <span class="camera-badge-pill" id="activeScreenCountBadge">0 LAYAR AKTIF</span>
+                                <button type="button" class="btn-mini" id="clearAllCamerasBtn">CLEAR ALL</button>
+                            </div>
+                        </div>
+
+                        <div id="cameraFeedsGrid" class="camera-feeds-grid">
+                            <div class="camera-grid-empty" id="cameraGridEmpty">
+                                Belum ada kamera yang dikonfirmasi.<br>
+                                Pilih kamera di sebelah kiri lalu klik <strong>✓ CONFIRM CAMERA</strong> untuk menambah layar.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="overview" id="overview">
       <div class="team-panels-grid" id="teamPanels">
         <div class="chart-empty">Menunggu konfigurasi tim pertandingan...</div>
-      </div>
+                </div>
 
-      <div class="map-panel" id="map">
-        <div class="panel-head">
-          <div>
-            <small>ARENA INTELLIGENCE · PLAYER TRACKING</small>
-            <h2>LIVE FIELD MAP</h2>
-          </div>
-          <div class="map-head-actions">
-            <button class="btn-mini" id="recenterMapBtn" title="Pusatkan Peta">⌖ CENTER</button>
-            <span class="map-status">AWAITING DATA</span>
-          </div>
-        </div>
+                <div class="map-panel" id="map">
+                    <div class="panel-head">
+                        <div>
+                            <small>ARENA INTELLIGENCE · PLAYER TRACKING</small>
+                            <h2>LIVE FIELD MAP</h2>
+                        </div>
+                        <div class="map-head-actions">
+                            <button class="btn-mini" id="recenterMapBtn" title="Pusatkan Peta">⌖ CENTER</button>
+                            <span class="map-status">AWAITING DATA</span>
+                        </div>
+                    </div>
 
-        <div class="map-wrapper">
-          <div id="tacticalMap"></div>
-        </div>
+                    <div class="map-wrapper">
+                        <div id="tacticalMap"></div>
+                    </div>
 
-        <div class="mobility-panel">
-          <div class="mobility-header">
-            <span>JARAK TEMPUH KESELURUHAN</span>
-            <span id="totalArenaDistance">TOTAL: 0.00 m</span>
-          </div>
+                    <div class="mobility-panel">
+                        <div class="mobility-header">
+                            <span>JARAK TEMPUH KESELURUHAN</span>
+                            <span id="totalArenaDistance">TOTAL: 0.00 m</span>
+                        </div>
 
           <div class="mobility-teams" id="teamMobilityStats">
             <span class="chart-empty">Statistik jarak per tim akan muncul di sini.</span>
-          </div>
+                        </div>
           <div class="mobility-bar-track dynamic-mobility-track" id="teamMobilityBars"></div>
-        </div>
+                    </div>
 
-        <div class="map-foot">
-          <span>PLAYER TRACKING <b id="activeUnitsVal">0 UNITS</b></span>
-          <span>BASE STATUS <b id="overallBaseVal">STANDBY</b></span>
-        </div>
-      </div>
-    </section>
+                    <div class="map-foot">
+                        <span>PLAYER TRACKING <b id="activeUnitsVal">0 UNITS</b></span>
+                        <span>BASE STATUS <b id="overallBaseVal">STANDBY</b></span>
+                    </div>
+                </div>
 
-    <section class="lower-grid">
-      <div class="panel analytics" id="analytics">
-        <div class="panel-head">
-          <div>
-            <small>PERFORMANCE INTELLIGENCE</small>
-            <h2>PLAYER ANALYTICS</h2>
-          </div>
-          <span class="muted-tag" id="analyticsStatus">WAITING DATA</span>
-        </div>
+                <div class="team-panel blue">
+                    <div class="team-title">
+                        <span>B</span>
+                        <div>
+                            <small>FACTION 02</small>
+                            <h2>BLUE TEAM</h2>
+                        </div>
+                        <b id="blueCount">0 PLAYERS</b>
+                    </div>
 
-        <div id="playerAnalyticsList" class="player-analytics-list">
-          <div class="chart-empty">
-            Statistik pemain akan muncul setelah data pertandingan diterima.
-          </div>
-        </div>
-      </div>
+                    <div class="empty">Belum ada pemain terhubung</div>
+                    <div id="bluePlayers"></div>
+                </div>
 
-      <div class="panel logs" id="logs">
-        <div class="panel-head">
-          <div>
-            <small>LIVE ACTIVITY STREAM</small>
-            <h2>EVENT LOG</h2>
-          </div>
+            </section>
 
-          <div class="log-actions">
-            <span class="muted-tag" id="eventCountTag">0 EVENTS</span>
-            <button class="btn clear-log" id="clearLogBtn" disabled>
-              CLEAR LOG
-            </button>
-          </div>
-        </div>
+            <section class="lower-grid">
 
-        <div class="log-empty" id="logEmpty">
-          Belum ada aktivitas pertandingan.
-        </div>
+                <div class="panel analytics" id="analytics">
+                    <div class="panel-head">
+                        <div>
+                            <small>PERFORMANCE INTELLIGENCE</small>
+                            <h2>PLAYER ANALYTICS</h2>
+                        </div>
+                        <span class="muted-tag" id="analyticsStatus">WAITING DATA</span>
+                    </div>
 
-        <div id="logList"></div>
-      </div>
-    </section>
+                    <div id="playerAnalyticsList" class="player-analytics-list">
+                        <div class="chart-empty">
+                            Statistik pemain akan muncul setelah data pertandingan diterima.
+                        </div>
+                    </div>
+                </div>
 
-    <!-- TACTICAL COMMS (HOST LIVE VOICE BROADCAST & SQUAD MONITOR) -->
+                <div class="panel logs" id="logs">
+                    <div class="panel-head">
+                        <div>
+                            <small>LIVE ACTIVITY STREAM</small>
+                            <h2>EVENT LOG</h2>
+                        </div>
+
+                        <div class="log-actions">
+                            <span class="muted-tag" id="eventCountTag">0 EVENTS</span>
+                            <button class="btn clear-log" id="clearLogBtn" disabled>
+                                CLEAR LOG
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="log-empty" id="logEmpty">
+                        Belum ada aktivitas pertandingan.
+                    </div>
+
+                    <div id="logList"></div>
+                </div>
+
+            </section>
+            <!-- TACTICAL COMMS (HOST LIVE VOICE BROADCAST & SQUAD MONITOR) -->
     <section class="panel" id="commsHostSection" style="margin-top:12px;margin-bottom:16px;">
-      <div class="panel-head">
-        <div>
-          <small>TACTICAL COMMS / COMMAND BROADCAST</small>
-          <h2>HOST VOICE &amp; SQUAD MONITOR</h2>
-        </div>
-        <span class="muted-tag" id="commsHostStatus">STANDBY</span>
-      </div>
-
-      <!-- LOBBY COMMS HOST -->
-      <div id="commsHostLobbyBox" style="margin-top:12px;">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-          <input id="commsHostName" maxlength="30" value="Command Center" placeholder="Nama Command / Host" style="flex:1;min-width:200px;background:#0a1017;border:1px solid var(--line);color:#e6edf3;padding:8px;font:11px 'DM Mono',monospace;">
-          <button type="button" class="btn-mini" id="commsHostCreateBtn" style="padding:8px 14px;">+ BUAT COMMS ROOM</button>
-        </div>
-        <div id="commsHostRoomList">
-          <div class="chart-empty">Memuat daftar Comms Room...</div>
-        </div>
-      </div>
-
-      <!-- MONITOR & LIVE VOICE BROADCAST -->
-      <div id="commsHostMonitorBox" class="hidden" style="margin-top:12px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 12px;border:1px solid var(--line);background:#0a1017;margin-bottom:10px;">
+        <div class="panel-head">
           <div>
-            <small style="display:block;color:var(--muted);font:9px 'DM Mono',monospace;">OPERATION / COMMS ROOM</small>
-            <strong id="commsHostActiveCode" style="font:700 16px 'DM Mono',monospace;letter-spacing:2px;color:var(--lime);">--------</strong>
+            <small>TACTICAL COMMS / COMMAND BROADCAST</small>
+            <h2>HOST VOICE &amp; SQUAD MONITOR</h2>
           </div>
-
-          <!-- PEMILIH TARGET LIVE VOICE ADMIN (DINAMIS SESUAI TIM) -->
-          <div id="commsHostVoiceTargets" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;"></div>
-
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button type="button" class="btn-mini" id="commsHostCloseRoomBtn" style="color:var(--red);border-color:var(--red);">TUTUP ROOM</button>
+          <span class="muted-tag" id="commsHostStatus">STANDBY</span>
+        </div>
+  
+        <!-- LOBBY COMMS HOST -->
+        <div id="commsHostLobbyBox" style="margin-top:12px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+            <input id="commsHostName" maxlength="30" value="Command Center" placeholder="Nama Command / Host" style="flex:1;min-width:200px;background:#0a1017;border:1px solid var(--line);color:#e6edf3;padding:8px;font:11px 'DM Mono',monospace;">
+            <button type="button" class="btn-mini" id="commsHostCreateBtn" style="padding:8px 14px;">+ BUAT COMMS ROOM</button>
+          </div>
+          <div id="commsHostRoomList">
+            <div class="chart-empty">Memuat daftar Comms Room...</div>
           </div>
         </div>
+  
+        <!-- MONITOR & LIVE VOICE BROADCAST -->
+        <div id="commsHostMonitorBox" class="hidden" style="margin-top:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 12px;border:1px solid var(--line);background:#0a1017;margin-bottom:10px;">
+            <div>
+              <small style="display:block;color:var(--muted);font:9px 'DM Mono',monospace;">OPERATION / COMMS ROOM</small>
+              <strong id="commsHostActiveCode" style="font:700 16px 'DM Mono',monospace;letter-spacing:2px;color:var(--lime);">--------</strong>
+            </div>
+  
+            <!-- PEMILIH TARGET LIVE VOICE ADMIN (DINAMIS SESUAI TIM) -->
+            <div id="commsHostVoiceTargets" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;"></div>
+  
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button type="button" class="btn-mini" id="commsHostCloseRoomBtn" style="color:var(--red);border-color:var(--red);">TUTUP ROOM</button>
+            </div>
+          </div>
+  
+          <!-- KOLOM CHAT & ROSTER PER TIM -->
+          <div id="commsHostTeamsGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;"></div>
+        </div>
+      </section>
 
-        <!-- KOLOM CHAT & ROSTER PER TIM -->
-        <div id="commsHostTeamsGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;"></div>
-      </div>
-    </section>
+        
+        </div>
 
-    <section class="system-row">
-      <div>
-        <span class="sys-icon">◎</span>
-        <span>
-          <b>AI PROCESSING</b>
-          <small>Menunggu koneksi service AI</small>
-        </span>
-        <em>NOT CONNECTED</em>
-      </div>
+        <section class="system-row">
+            <div>
+                <span class="sys-icon">◎</span>
+                <span>
+                    <b>AI PROCESSING</b>
+                    <small>Menunggu koneksi service AI</small>
+                </span>
+                <em>NOT CONNECTED</em>
+            </div>
 
-      <div>
-        <span class="sys-icon">▣</span>
-        <span>
-          <b>CAMERA MONITOR</b>
-          <small>Belum ada stream kamera</small>
-        </span>
-        <em>0 SOURCES</em>
-      </div>
+            <div>
+                <span class="sys-icon">▣</span>
+                <span>
+                    <b>CAMERA MONITOR</b>
+                    <small>Belum ada stream kamera</small>
+                </span>
+                <em>0 / 8 SOURCES</em>
+            </div>
 
-      <div>
-        <span class="sys-icon">◈</span>
-        <span>
-          <b>DATABASE</b>
-          <small>Supabase belum dikonfigurasi</small>
-        </span>
-        <em>NOT CONNECTED</em>
-      </div>
-    </section>
+            <div>
+                <span class="sys-icon">◈</span>
+                <span>
+                    <b>DATABASE</b>
+                    <small>Supabase belum dikonfigurasi</small>
+                </span>
+                <em>NOT CONNECTED</em>
+            </div>
+        </section>
 
-    <footer>
-      FIELD OPS COMMAND CENTER
-      <span>ADMIN DASHBOARD · BUILD 0.1</span>
-    </footer>
-  </main>
+        <footer>
+            FIELD OPS COMMAND CENTER
+            <span>ADMIN DASHBOARD · BUILD 0.1</span>
+        </footer>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="app.js?v=4"></script>
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
-  <script src="comms-host.js"></script>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="app.js?v=9"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <script src="comms-host.js"></script>
 </body>
 </html>

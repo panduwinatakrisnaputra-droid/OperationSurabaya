@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OPERATION: SURABAYA — Referee Camera</title>
+  <link rel="icon" href="data:," />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background: #090d12; color: #e6edf3; min-height: 100vh; padding: 20px; }
+    .container { max-width: 820px; margin: 0 auto; display: grid; gap: 16px; }
+    .card { background: #101720; border: 1px solid #1e2a3a; border-radius: 10px; padding: 18px; }
+    .header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
+    .sub { font-size: 11px; letter-spacing: 2px; color: #22c55e; text-transform: uppercase; }
+    .title { font-size: 20px; font-weight: 700; margin-top: 2px; }
+    .badge { padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); }
+    .badge.live { background: rgba(34, 197, 94, 0.15); color: #22c55e; border-color: rgba(34, 197, 94, 0.4); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+    label { display: block; font-size: 11px; color: #8b9bb0; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+    input, select { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #263549; background: #090d12; color: #e6edf3; font-size: 14px; }
+    .btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+    button { padding: 10px 16px; border-radius: 8px; border: none; font-weight: 700; font-size: 13px; cursor: pointer; }
+    #btnStart { background: #22c55e; color: #051109; }
+    #btnFlip { background: #1e293b; color: #e6edf3; border: 1px solid #334155; }
+    #btnStop { background: #ef4444; color: #fff; }
+    .meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 13px; }
+    .slot-tag { font-weight: 700; color: #22c55e; }
+    video { width: 100%; max-height: 460px; background: #000; border-radius: 8px; display: block; object-fit: cover; }
+    .log { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #8b9bb0; max-height: 130px; overflow-y: auto; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card header">
+      <div>
+        <div class="sub">Operation: Surabaya · Referee Unit</div>
+        <div class="title">REFEREE CAMERA STREAMER</div>
+      </div>
+      <div id="liveBadge" class="badge">OFFLINE</div>
+    </div>
+
+    <div class="card">
+      <div class="grid">
+        <div>
+          <label for="matchIdInput">Match / Room ID</label>
+          <input id="matchIdInput" type="text" value="default" placeholder="contoh: default" />
+        </div>
+        <div>
+          <label for="slotSelect">Pilih Slot Kamera Wasit</label>
+          <select id="slotSelect">
+            <option value="red-1" data-label="CAMERA 1 · RED TEAM">camera 1 red team</option>
+            <option value="red-2" data-label="CAMERA 2 · RED TEAM">camera 2 red team</option>
+            <option value="blue-1" data-label="CAMERA 1 · BLUE TEAM">camera 1 blue team</option>
+            <option value="blue-2" data-label="CAMERA 2 · BLUE TEAM">camera 2 blue team</option>
+            <option value="green-1" data-label="CAMERA 1 · GREEN TEAM" selected>camera 1 green team</option>
+            <option value="green-2" data-label="CAMERA 2 · GREEN TEAM">camera 2 green team</option>
+            <option value="yellow-1" data-label="CAMERA 1 · YELLOW TEAM">camera 1 yellow team</option>
+            <option value="yellow-2" data-label="CAMERA 2 · YELLOW TEAM">camera 2 yellow team</option>
+          </select>
+        </div>
+        <div>
+          <label for="facingSelect">Arah Kamera</label>
+          <select id="facingSelect">
+            <option value="environment">Kamera Belakang</option>
+            <option value="user">Kamera Depan</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="btns">
+        <button id="btnStart" type="button">Start Live</button>
+        <button id="btnFlip" type="button">Flip Camera</button>
+        <button id="btnStop" type="button">Stop</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="meta">
+        <span>Keterangan Slot: <strong id="activeSlotLabel" class="slot-tag">CAMERA 1 · GREEN TEAM</strong></span>
+        <span id="connText">Menunggu mulai...</span>
+      </div>
+      <video id="refereeVideo" autoplay playsinline muted></video>
+    </div>
+
+    <div id="logBox" class="card log">[REF-CAM] Siap digunakan. Pilih slot kamera lalu klik Start Live.</div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -9,15 +9,13 @@ from app.Models.match import (
     BaseShutdownRequest,
     GhostModeScanRequest,
     WeaponUpgradeScanRequest,
+    PlayerMovementRequest,
 )
 from app.Http.Controllers import match_controller, gameplay_controller
 
 router = APIRouter(prefix="/api/matches", tags=["Matches & Gameplay"])
 
-@router.get("/history")
-def get_match_history():
-    return match_controller.get_match_history()
-
+# Match history
 @router.get("/history")
 def get_match_history():
     return match_controller.get_match_history()
@@ -67,6 +65,10 @@ def detect_gun(match_id: str, data: GunDetectRequest):
 @router.post("/{match_id}/shoot")
 def shoot_player(match_id: str, data: PlayerShootRequest):
     return gameplay_controller.shoot_player(match_id, data)
+
+@router.post("/{match_id}/movement")
+def record_movement(match_id: str, data: PlayerMovementRequest):
+    return gameplay_controller.record_player_movement(match_id, data)
 
 # QR Tactical Objectives
 @router.post("/{match_id}/base-shutdown/start")

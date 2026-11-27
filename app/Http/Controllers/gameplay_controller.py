@@ -1,5 +1,8 @@
 import asyncio
 import time
+import math
+from fastapi import HTTPException
+from app.Models.match import PlayerMovementRequest
 from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException
 from config.database import supabase
@@ -1409,3 +1412,83 @@ def get_match_analytics(match_id: str):
             status_code=500,
             detail="Gagal mengambil analytics pertandingan"
         )
+def _haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    r = 6371000.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = (
+        math.sin(dphi / 2.0) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2.0) ** 2
+    )
+    return 2.0 * r * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+
+
+def record_player_movement(match_id: str, data: PlayerMovementRequest):
+    try:
+        match_res = (
+            supabase.table("matches")
+            .select("id, status")
+            .eq("id", match_id)
+            .limit(1)
+            .execute()
+        )
+        if not match_res.data:
+            raise HTTPException(status_code=404, detail="Pertandingan tidak ditemukan")
+        if match_res.data[0].get("status") != "active":
+            return {"success": False, "message": "Pertandingan belum aktif"}
+
+        prev_res = (
+            supabase.table("game_events")
+            .select("event_data")
+            .eq("match_id", match_id)
+            .eq("actor_player_id", data.player_id)
+            .eq("event_type", "player_movement")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+
+        prev_distance = 0.0
+        added_distance = 0.0
+
+        if prev_res.data and isinstance(prev_res.data[0].get("event_data"), dict):
+            prev_data = prev_res.data[0]["event_data"]
+            prev_distance = float(prev_data.get("distance_meters", 0) or 0)
+            prev_lat = prev_data.get("latitude")
+            prev_lng = prev_data.get("longitude")
+            if prev_lat is not None and prev_lng is not None:
+                step_dist = _haversine_meters(
+                    float(prev_lat), float(prev_lng), data.latitude, data.longitude
+                )
+                added_distance = step_dist
+
+        total_distance = round(prev_distance + added_distance, 2)
+
+        supabase.table("game_events").insert({
+            "match_id": match_id,
+            "actor_player_id": data.player_id,
+            "event_type": "player_movement",
+            "description": f"Update posisi GPS ({data.latitude:.5f}, {data.longitude:.5f})",
+            "event_data": {
+                "latitude": data.latitude,
+                "longitude": data.longitude,
+                "lat": data.latitude,
+                "lng": data.longitude,
+                "distance_meters": total_distance,
+                "total_steps": 0,
+            },
+        }).execute()
+
+        return {
+            "success": True,
+            "latitude": data.latitude,
+            "longitude": data.longitude,
+            "distance_meters": total_distance,
+        }
+    except HTTPException:
+        raise
+    except Exception as error:
+        print("MOVEMENT ERROR:", repr(error))
+        raise HTTPException(status_code=500, detail="Gagal mencatat lokasi pemain")

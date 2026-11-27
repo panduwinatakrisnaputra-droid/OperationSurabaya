@@ -1,4 +1,5 @@
 const API_BASE = 'http://127.0.0.1:8000';
+const WS_BASE = API_BASE.replace(/^http/, 'ws');
 
 const start = document.getElementById('startBtn');
 const stop = document.getElementById('stopBtn');
@@ -7,6 +8,9 @@ const deleteAllBtn = document.getElementById('deleteAllBtn');
 const recenterMapBtn = document.getElementById('recenterMapBtn');
 
 let currentMatch = null;
+let selectedMatchId = null;
+let activeViewMode = 'browse';
+let browsedMatches = [];
 let refreshTimer = null;
 
 // Koordinat Arena Surabaya (PENS)
@@ -102,6 +106,403 @@ function setSystemDatabase(connected, message) {
     if (status) {
         status.textContent = connected ? 'CONNECTED' : 'OFFLINE';
         status.style.color = connected ? 'var(--lime)' : 'var(--red)';
+    }
+}
+
+function setSystemCamera(onlineCount, message) {
+    const item = [...document.querySelectorAll('.system-row > div')]
+        .find(el => el.textContent.includes('CAMERA MONITOR'));
+
+    if (!item) return;
+
+    const small = item.querySelector('small');
+    const status = item.querySelector('em');
+
+    if (small) small.textContent = message;
+
+    if (status) {
+        status.textContent = `${onlineCount} / 8 SOURCES`;
+        status.style.color = onlineCount > 0 ? 'var(--lime)' : '';
+    }
+}
+
+// ==============================
+// MATCH BROWSE & POST-MATCH SUMMARY NAVIGATION
+// ==============================
+
+function setSubMenuLocked(locked) {
+    ['navOverview', 'navCamera'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.toggle('disabled-nav', locked);
+        }
+    });
+}
+
+function renderMatchBrowseCards(matches = []) {
+    const container = document.getElementById('matchBrowseList');
+    const countTag = document.getElementById('browseCountTag');
+
+    if (countTag) {
+        countTag.textContent = `${matches.length} ${matches.length === 1 ? 'MATCH' : 'MATCHES'}`;
+    }
+
+    if (!container) return;
+
+    if (!matches.length) {
+        container.innerHTML = `
+            <div class="browse-empty-box">
+                Belum ada match yang tersedia saat ini.<br>
+                Buat room/match terlebih dahulu lalu klik <strong>↻ REFRESH</strong>.
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = '';
+
+    matches.forEach(match => {
+        const statusRaw = (match.status || 'waiting').toLowerCase();
+        const isCompleted = statusRaw === 'completed';
+
+        const statusClass = statusRaw === 'active'
+            ? 'active'
+            : statusRaw === 'waiting'
+                ? 'waiting'
+                : 'completed';
+
+        const statusLabel = statusRaw === 'active'
+            ? 'ACTIVE'
+            : statusRaw === 'waiting'
+                ? 'WAITING LOBBY'
+                : 'COMPLETED';
+
+        const redCount = match.red_players_count ?? match.red_count ?? '-';
+        const blueCount = match.blue_players_count ?? match.blue_count ?? '-';
+
+        const card = document.createElement('div');
+        card.className = 'match-browse-card';
+        card.innerHTML = `
+            <div>
+                <div class="match-card-top">
+                    <div>
+                        <small style="font:9px 'DM Mono',monospace;color:var(--muted);">OPERATION MATCH</small>
+                        <div class="match-card-title">${match.match_name || 'Unnamed Match'}</div>
+                        <div class="match-card-id">ID: ${match.id}</div>
+                    </div>
+                    <span class="match-status-pill ${statusClass}">${statusLabel}</span>
+                </div>
+
+                <div class="match-card-teams" style="margin-top:12px;">
+                    <div>
+                        <span>FACTION 01</span>
+                        <strong style="color:var(--red);">RED TEAM (${redCount})</strong>
+                    </div>
+                    <div>
+                        <span>FACTION 02</span>
+                        <strong style="color:var(--blue);">BLUE TEAM (${blueCount})</strong>
+                    </div>
+                </div>
+            </div>
+
+            <button type="button" class="btn-enter-match ${isCompleted ? 'summary-mode' : ''}">
+                ${isCompleted ? '📊 VIEW MATCH SUMMARY' : '▶ ENTER MATCH'}
+            </button>
+        `;
+
+        const enterBtn = card.querySelector('.btn-enter-match');
+        enterBtn.addEventListener('click', () => {
+            if (isCompleted) {
+                openPostMatchSummary(match);
+            } else {
+                enterMatchWorkspace(match);
+            }
+        });
+
+        container.appendChild(card);
+    });
+}
+
+async function enterMatchWorkspace(match, targetSubView = 'overview') {
+    if (!match) return;
+    if ((match.status || '').toLowerCase() === 'completed') {
+        await openPostMatchSummary(match);
+        return;
+    }
+    selectedMatchId = match.id;
+    currentMatch = match;
+    setSubMenuLocked(false);
+    switchAdminMenu(targetSubView);
+    await refreshDashboard();
+}
+
+function exitToMatchBrowse() {
+    selectedMatchId = null;
+    setSubMenuLocked(true);
+    switchAdminMenu('browse');
+}
+
+function renderPostMatchSummaryData(match, healthPlayers = [], analyticsPlayers = [], lobbyData = null) {
+    const titleEl = document.getElementById('summaryMatchTitle');
+    const winnerBadge = document.getElementById('summaryWinnerBadge');
+    const teamsGrid = document.getElementById('summaryTeamsGrid');
+    const playersGrid = document.getElementById('summaryPlayersGrid');
+    const playerCountTag = document.getElementById('summaryPlayerCountTag');
+
+    if (titleEl) {
+        titleEl.textContent = `${match?.match_name || 'OPERATION MATCH'} · FINAL STATISTICS`;
+    }
+
+    const healthMap = new Map(healthPlayers.map(p => [p.player_id, p]));
+    const analyticsMap = new Map(analyticsPlayers.map(p => [p.player_id, p]));
+
+    // Gabungkan semua data pemain dari analytics, health, dan lobby agar semua tim & pemain tercakup
+    const unifiedPlayers = new Map();
+
+    const addPlayerEntry = (raw, fallbackTeam = '') => {
+        const pid = raw.player_id || raw.id;
+        if (!pid) return;
+        const existing = unifiedPlayers.get(pid) || {};
+        const h = healthMap.get(pid) || {};
+        const a = analyticsMap.get(pid) || {};
+
+        unifiedPlayers.set(pid, {
+            player_id: pid,
+            full_name: a.full_name || h.full_name || raw.full_name || existing.full_name || raw.username || 'Unknown Player',
+            username: a.username || h.username || raw.username || existing.username || '-',
+            player_number: a.player_number ?? h.player_number ?? raw.player_number ?? existing.player_number ?? '-',
+            team_code: (a.team_code || h.team_code || raw.team_code || fallbackTeam || existing.team_code || 'UNKNOWN').toUpperCase(),
+            current_health: h.current_health ?? existing.current_health ?? 100,
+            max_health: h.max_health ?? existing.max_health ?? 100,
+            is_eliminated: h.is_eliminated ?? existing.is_eliminated ?? false,
+            total_shots: Number(a.total_shots ?? existing.total_shots ?? 0),
+            total_hit_given: Number(a.total_hit_given ?? existing.total_hit_given ?? 0),
+            total_hit_received: Number(a.total_hit_received ?? existing.total_hit_received ?? 0),
+            accuracy_percent: Number(a.accuracy_percent ?? existing.accuracy_percent ?? 0),
+            total_heal: Number(a.total_heal ?? existing.total_heal ?? 0),
+            distance_meters: Number(a.distance_meters ?? existing.distance_meters ?? 0)
+        });
+    };
+
+    (lobbyData?.red_team?.players || []).forEach(item => {
+        if (item.player) addPlayerEntry(item.player, 'RED');
+    });
+    (lobbyData?.blue_team?.players || []).forEach(item => {
+        if (item.player) addPlayerEntry(item.player, 'BLUE');
+    });
+    healthPlayers.forEach(p => addPlayerEntry(p));
+    analyticsPlayers.forEach(p => addPlayerEntry(p));
+
+    const allPlayers = [...unifiedPlayers.values()];
+
+    // Kelompokkan statistik berdasarkan semua tim yang ada (minimal RED & BLUE selalu ditampilkan)
+    const teamCodes = new Set(['RED', 'BLUE']);
+    allPlayers.forEach(p => {
+        if (p.team_code && p.team_code !== 'UNKNOWN') {
+            teamCodes.add(p.team_code);
+        }
+    });
+
+    const teamSummaries = [...teamCodes].map(code => {
+        const members = allPlayers.filter(p => p.team_code === code);
+        const aliveCount = members.filter(p => !p.is_eliminated).length;
+        const totalShots = members.reduce((sum, p) => sum + p.total_shots, 0);
+        const totalHitGiven = members.reduce((sum, p) => sum + p.total_hit_given, 0);
+        const totalHitReceived = members.reduce((sum, p) => sum + p.total_hit_received, 0);
+        const totalHeal = members.reduce((sum, p) => sum + p.total_heal, 0);
+        const totalDistance = members.reduce((sum, p) => sum + p.distance_meters, 0);
+        const accuracy = totalShots > 0
+            ? ((totalHitGiven / totalShots) * 100).toFixed(1)
+            : '0.0';
+
+        return {
+            code,
+            members,
+            aliveCount,
+            totalShots,
+            totalHitGiven,
+            totalHitReceived,
+            totalHeal,
+            totalDistance,
+            accuracy
+        };
+    });
+
+    // Tentukan pemenang dari winner_team_code atau perbandingan surviving/hits
+    let winnerCode = (match?.winner_team_code || '').toUpperCase();
+    if (!winnerCode && teamSummaries.length >= 2) {
+        const sorted = [...teamSummaries].sort((a, b) => {
+            if (b.aliveCount !== a.aliveCount) return b.aliveCount - a.aliveCount;
+            if (b.totalHitGiven !== a.totalHitGiven) return b.totalHitGiven - a.totalHitGiven;
+            return b.totalDistance - a.totalDistance;
+        });
+        if (sorted[0].aliveCount > sorted[1].aliveCount || sorted[0].totalHitGiven > sorted[1].totalHitGiven) {
+            winnerCode = sorted[0].code;
+        }
+    }
+
+    if (winnerBadge) {
+        winnerBadge.className = 'summary-winner-badge';
+        if (winnerCode) {
+            winnerBadge.textContent = `VICTORY · ${winnerCode} TEAM`;
+            if (winnerCode === 'RED') winnerBadge.classList.add('red');
+            if (winnerCode === 'BLUE') winnerBadge.classList.add('blue');
+        } else {
+            winnerBadge.textContent = 'MATCH COMPLETED · FINAL STANDINGS';
+        }
+    }
+
+    if (teamsGrid) {
+        teamsGrid.innerHTML = '';
+        teamSummaries.forEach(team => {
+            const teamLower = team.code.toLowerCase();
+            const isWinner = winnerCode && winnerCode === team.code;
+            const titleColor = team.code === 'RED'
+                ? 'var(--red)'
+                : team.code === 'BLUE'
+                    ? 'var(--blue)'
+                    : team.code === 'GREEN'
+                        ? '#22c55e'
+                        : '#eab308';
+
+            const card = document.createElement('div');
+            card.className = `summary-team-card team-${teamLower}`;
+            card.innerHTML = `
+                <div class="summary-team-header">
+                    <div>
+                        <small style="font:9px 'DM Mono',monospace;color:var(--muted);">TEAM STATISTICS</small>
+                        <h3 style="color:${titleColor};">${team.code} TEAM</h3>
+                    </div>
+                    <span class="match-status-pill ${isWinner ? 'active' : 'completed'}">
+                        ${isWinner ? '★ WINNER' : `${team.aliveCount} / ${team.members.length} ALIVE`}
+                    </span>
+                </div>
+
+                <div class="summary-kpi-grid">
+                    <div class="summary-kpi-box">
+                        <small>PEMAIN BERTAHAN</small>
+                        <strong>${team.aliveCount} / ${team.members.length}</strong>
+                    </div>
+                    <div class="summary-kpi-box">
+                        <small>TOTAL TEMBAKAN</small>
+                        <strong>${team.totalShots}</strong>
+                    </div>
+                    <div class="summary-kpi-box">
+                        <small>HIT GIVEN</small>
+                        <strong>${team.totalHitGiven}</strong>
+                    </div>
+                    <div class="summary-kpi-box">
+                        <small>HIT RECEIVED</small>
+                        <strong>${team.totalHitReceived}</strong>
+                    </div>
+                    <div class="summary-kpi-box">
+                        <small>AKURASI TIM</small>
+                        <strong>${team.accuracy}%</strong>
+                    </div>
+                    <div class="summary-kpi-box">
+                        <small>TOTAL HEAL</small>
+                        <strong>${team.totalHeal}</strong>
+                    </div>
+                    <div class="summary-kpi-box" style="grid-column: 1 / -1;">
+                        <small>TOTAL JARAK TEMPUH TIM</small>
+                        <strong>${team.totalDistance.toFixed(2)} m</strong>
+                    </div>
+                </div>
+            `;
+            teamsGrid.appendChild(card);
+        });
+    }
+
+    if (playerCountTag) {
+        playerCountTag.textContent = `${allPlayers.length} PLAYERS`;
+    }
+
+    if (playersGrid) {
+        playersGrid.innerHTML = '';
+        if (!allPlayers.length) {
+            playersGrid.innerHTML = `
+                <div class="chart-empty" style="grid-column:1/-1;">
+                    Tidak ada data statistik pemain tercatat pada pertandingan ini.
+                </div>
+            `;
+            return;
+        }
+
+        allPlayers.forEach(player => {
+            const teamClass = player.team_code === 'RED' ? 'red-text' : 'blue-text';
+            const card = document.createElement('div');
+            card.className = 'player-analytics-card';
+            card.innerHTML = `
+                <div class="player-analytics-heading">
+                    <div>
+                        <strong>${player.full_name}</strong>
+                        <small>ID #${player.player_number} · @${player.username} · ${player.is_eliminated ? 'ELIMINATED' : 'SURVIVED'} (${player.current_health}/${player.max_health} HP)</small>
+                    </div>
+                    <span class="player-team-tag ${teamClass}">${player.team_code}</span>
+                </div>
+                <div class="player-metrics-grid">
+                    <div class="player-metric">
+                        <small>TOTAL TEMBAKAN</small>
+                        <strong>${player.total_shots}</strong>
+                    </div>
+                    <div class="player-metric">
+                        <small>HIT GIVEN</small>
+                        <strong>${player.total_hit_given}</strong>
+                    </div>
+                    <div class="player-metric">
+                        <small>HIT RECEIVED</small>
+                        <strong>${player.total_hit_received}</strong>
+                    </div>
+                    <div class="player-metric">
+                        <small>AKURASI</small>
+                        <strong>${player.accuracy_percent}%</strong>
+                    </div>
+                    <div class="player-metric">
+                        <small>TOTAL HEAL</small>
+                        <strong>${player.total_heal}</strong>
+                    </div>
+                    <div class="player-metric">
+                        <small>JARAK TEMPUH</small>
+                        <strong>${player.distance_meters.toFixed(2)} m</strong>
+                    </div>
+                </div>
+            `;
+            playersGrid.appendChild(card);
+        });
+    }
+}
+
+async function openPostMatchSummary(match) {
+    if (!match || !match.id) return;
+
+    // Kunci Overview dan Camera, serta hentikan stream kamera aktif
+    selectedMatchId = null;
+    currentMatch = { ...match, status: 'completed' };
+    setSubMenuLocked(true);
+
+    if (activeCameraFeeds.size > 0) {
+        [...activeCameraFeeds.keys()].forEach(slotId => removeCameraSlot(slotId, false));
+        saveConfirmedSlotsToStorage();
+        syncCameraDropdownState();
+    }
+
+    switchAdminMenu('summary');
+
+    try {
+        const [lobbyRes, healthRes, analyticsRes] = await Promise.allSettled([
+            api(`/api/matches/${match.id}/lobby`),
+            api(`/api/matches/${match.id}/health`),
+            api(`/api/matches/${match.id}/analytics`)
+        ]);
+
+        const lobbyData = lobbyRes.status === 'fulfilled' ? lobbyRes.value.lobby : null;
+        const healthPlayers = healthRes.status === 'fulfilled' ? (healthRes.value.players || []) : [];
+        const analyticsPlayers = analyticsRes.status === 'fulfilled' ? (analyticsRes.value.players || []) : [];
+
+        renderPostMatchSummaryData(currentMatch, healthPlayers, analyticsPlayers, lobbyData);
+    } catch (err) {
+        console.error('SUMMARY LOAD ERROR:', err);
+        renderPostMatchSummaryData(currentMatch, [], [], null);
     }
 }
 
@@ -324,7 +725,6 @@ function renderFieldMapAndTelemetry(match, healthPlayers = [], analyticsPlayers 
 
     const analyticsMap = new Map(analyticsPlayers.map(p => [p.player_id, p]));
 
-    // Ambil koordinat GPS terbaru tiap pemain dari event player_movement jika ada
     const gpsMap = new Map();
     for (const ev of events) {
         if (ev.event_type === 'player_movement' && ev.actor_player_id && !gpsMap.has(ev.actor_player_id)) {
@@ -337,7 +737,6 @@ function renderFieldMapAndTelemetry(match, healthPlayers = [], analyticsPlayers 
         }
     }
 
-    // Update Titik Pemain di Peta Leaflet
     if (tacticalMap && playerMarkersLayer) {
         tacticalMap.invalidateSize();
         playerMarkersLayer.clearLayers();
@@ -419,7 +818,6 @@ function renderFieldMapAndTelemetry(match, healthPlayers = [], analyticsPlayers 
         });
     }
 
-    // Update Footer Status Unit & Base
     const aliveUnits = healthPlayers.filter(p => !p.is_eliminated).length;
     if (activeUnitsEl) {
         activeUnitsEl.textContent = `${aliveUnits} / ${healthPlayers.length} ACTIVE`;
@@ -448,7 +846,7 @@ function renderFieldMapAndTelemetry(match, healthPlayers = [], analyticsPlayers 
 function renderMatch(match) {
     currentMatch = match;
 
-    const mapStatus = document.querySelector('.map-status');
+    const mapStatus = document.querySelector('#map .map-status');
 
     if (!match) {
         if (state) state.textContent = 'NO MATCH DATA';
@@ -488,8 +886,13 @@ function renderEventLog(events = []) {
     const emptyEl = document.getElementById('logEmpty');
     const countTag = document.getElementById('eventCountTag');
 
+    // Saring event GPS agar tidak memenuhi Event Log, tapi tetap dipakai oleh peta & jarak
+    const filteredEvents = (events || []).filter(
+        event => event.event_type !== 'player_movement'
+    );
+
     if (countTag) {
-        countTag.textContent = `${events.length} EVENTS`;
+        countTag.textContent = `${filteredEvents.length} EVENTS`;
     }
 
     if (!container) return;
@@ -497,12 +900,12 @@ function renderEventLog(events = []) {
     container.innerHTML = '';
 
     if (emptyEl) {
-        emptyEl.style.display = events.length ? 'none' : 'block';
+        emptyEl.style.display = filteredEvents.length ? 'none' : 'block';
     }
 
-    if (!events.length) return;
+    if (!filteredEvents.length) return;
 
-    events.forEach(event => {
+    filteredEvents.forEach(event => {
         const item = document.createElement('div');
         item.className = 'log-item';
 
@@ -628,68 +1031,135 @@ function clearDashboard() {
 }
 
 // ==============================
-// REFRESH DASHBOARD
+// REFRESH DASHBOARD & BROWSE LIST
 // ==============================
 
 async function refreshDashboard() {
     try {
-        const result = await api('/api/matches/current');
+        api('/api/referee-cam/status/default')
+            .then(camStatus => {
+                const slots = Object.values(camStatus.slots || {});
+                const onlineCount = slots.filter(s => s.online).length;
+                setSystemCamera(
+                    onlineCount,
+                    onlineCount > 0 ? `${onlineCount} kamera wasit aktif` : 'Belum ada stream kamera'
+                );
+            })
+            .catch(() => {});
 
-        renderMatch(result.data);
-        setSystemDatabase(true, 'Supabase PostgreSQL terhubung');
-
-        if (!result.data) {
-            clearDashboard();
-            return;
-        }
-
-        const matchId = result.data.id;
-
-        const [lobbyResult, healthResult, eventResult] = await Promise.all([
-            api(`/api/matches/${matchId}/lobby`),
-            api(`/api/matches/${matchId}/health`),
-            api(`/api/matches/${matchId}/events`)
+        const [currentRes, allMatchesRes] = await Promise.allSettled([
+            api('/api/matches/current'),
+            api('/api/matches/history')
         ]);
 
-        const healthPlayers = healthResult.players || [];
-        const events = eventResult.events || [];
+        if (currentRes.status === 'rejected') {
+            throw currentRes.reason;
+        }
 
-        renderEventLog(events);
+        setSystemDatabase(true, 'Supabase PostgreSQL terhubung');
 
-        const healthMap = new Map(
-            healthPlayers.map(player => [
-                player.player_id,
-                player
-            ])
-        );
+        const matchMap = new Map();
+        const currentData = currentRes.value?.data;
+        if (currentData && currentData.id) {
+            matchMap.set(currentData.id, currentData);
+        }
+
+        if (allMatchesRes.status === 'fulfilled') {
+            const rawList = Array.isArray(allMatchesRes.value?.data)
+                ? allMatchesRes.value.data
+                : Array.isArray(allMatchesRes.value?.matches)
+                    ? allMatchesRes.value.matches
+                    : Array.isArray(allMatchesRes.value)
+                        ? allMatchesRes.value
+                        : [];
+
+            rawList.forEach(m => {
+                if (m && m.id && !matchMap.has(m.id)) {
+                    matchMap.set(m.id, m);
+                }
+            });
+        }
+
+        browsedMatches = [...matchMap.values()];
+
+        const activeMatch = (selectedMatchId && matchMap.get(selectedMatchId))
+            || currentData
+            || null;
+
+        if (activeMatch && activeMatch.id) {
+            const [lobbyResult, healthResult, eventResult] = await Promise.all([
+                api(`/api/matches/${activeMatch.id}/lobby`),
+                api(`/api/matches/${activeMatch.id}/health`),
+                api(`/api/matches/${activeMatch.id}/events`)
+            ]);
+
+            const redPlayersList = lobbyResult.lobby?.red_team?.players || [];
+            const bluePlayersList = lobbyResult.lobby?.blue_team?.players || [];
+
+            activeMatch.red_players_count = redPlayersList.length;
+            activeMatch.blue_players_count = bluePlayersList.length;
+
+            renderMatchBrowseCards(browsedMatches);
+
+            // Jika admin berada di halaman Match Browse atau Post-Match Summary, jangan masuk ke workspace aktif
+            if (!selectedMatchId || activeViewMode === 'summary') {
+                return;
+            }
+
+            // Jika match tiba-tiba berstatus completed, kunci workspace dan arahkan ke Post-Match Summary
+            if ((activeMatch.status || '').toLowerCase() === 'completed') {
+                await openPostMatchSummary(activeMatch);
+                return;
+            }
+
+            renderMatch(activeMatch);
+
+            const healthPlayers = healthResult.players || [];
+            const events = eventResult.events || [];
+
+            renderEventLog(events);
+
+            const healthMap = new Map(
+                healthPlayers.map(player => [
+                    player.player_id,
+                    player
+                ])
+            );
 
         const configuredTeams = lobbyResult.lobby?.teams || [];
         renderDynamicTeams(configuredTeams, healthMap);
 
-        try {
-            const analyticsResult = await api(
-                `/api/matches/${matchId}/analytics`
-            );
+            try {
+                const analyticsResult = await api(
+                    `/api/matches/${activeMatch.id}/analytics`
+                );
 
-            const analyticsPlayers = analyticsResult.players || [];
-            renderPlayerAnalytics(analyticsPlayers, configuredTeams);
-            renderFieldMapAndTelemetry(result.data, healthPlayers, analyticsPlayers, events, configuredTeams);
+                const analyticsPlayers = analyticsResult.players || [];
+                renderPlayerAnalytics(analyticsPlayers, configuredTeams);
+                renderFieldMapAndTelemetry(activeMatch, healthPlayers, analyticsPlayers, eventResult.events || [], configuredTeams);
 
-        } catch (analyticsError) {
-            console.error('PLAYER ANALYTICS ERROR:', analyticsError);
-            renderFieldMapAndTelemetry(result.data, healthPlayers, [], events, configuredTeams);
+            } catch (analyticsError) {
+                console.error('PLAYER ANALYTICS ERROR:', analyticsError);
+                renderFieldMapAndTelemetry(activeMatch, healthPlayers, [], eventResult.events || [], configuredTeams);
 
-            const status = document.getElementById('analyticsStatus');
-            const container = document.getElementById('playerAnalyticsList');
+                const status = document.getElementById('analyticsStatus');
+                const container = document.getElementById('playerAnalyticsList');
 
-            if (status) status.textContent = 'ANALYTICS ERROR';
+                if (status) status.textContent = 'ANALYTICS ERROR';
 
-            if (container) {
-                container.innerHTML = `
-                    <div class="chart-empty">
-                        Gagal memuat Player Analytics.
-                    </div>
-                `;
+                if (container) {
+                    container.innerHTML = `
+                        <div class="chart-empty">
+                            Gagal memuat Player Analytics.
+                        </div>
+                    `;
+                }
+            }
+        } else {
+            renderMatchBrowseCards(browsedMatches);
+            if (activeViewMode !== 'summary') {
+                renderMatch(null);
+                clearDashboard();
             }
         }
 
@@ -697,6 +1167,7 @@ async function refreshDashboard() {
         console.error('DASHBOARD ERROR:', error);
 
         setSystemDatabase(false, `API tidak dapat diakses: ${error.message}`);
+        renderMatchBrowseCards([]);
 
         if (state) {
             state.textContent = 'BACKEND CONNECTION ERROR';
@@ -730,7 +1201,7 @@ if (start) {
 }
 
 // ==============================
-// END MATCH
+// END MATCH -> FULL PAGE POST-MATCH SUMMARY & LOCK OVERVIEW / CAMERA
 // ==============================
 
 if (stop) {
@@ -739,22 +1210,28 @@ if (stop) {
 
         const confirmed = confirm(
             'Akhiri pertandingan sekarang?\n\n' +
-            'Data pertandingan akan tersimpan di halaman Match History.'
+            'Setelah diakhiri, kamu akan diarahkan ke halaman Statistik Akhir Tim dan tidak bisa kembali ke Overview maupun Camera.'
         );
 
         if (!confirmed) return;
 
+        const endedMatchSnapshot = { ...currentMatch, status: 'completed' };
         stop.disabled = true;
 
         try {
-            await api(
-                `/api/admin/matches/${currentMatch.id}/end`,
+            const endResult = await api(
+                `/api/admin/matches/${endedMatchSnapshot.id}/end`,
                 { method: 'POST' }
             );
 
-            await refreshDashboard();
+            const finalizedMatch = {
+                ...endedMatchSnapshot,
+                ...(endResult?.data || endResult?.match || {}),
+                status: 'completed'
+            };
 
-            alert('Pertandingan berhasil diakhiri dan tersimpan di Match History.');
+            await openPostMatchSummary(finalizedMatch);
+            refreshDashboard();
 
         } catch (error) {
             alert(`Gagal mengakhiri pertandingan: ${error.message}`);
@@ -792,9 +1269,11 @@ if (deleteAllBtn) {
             });
 
             currentMatch = null;
+            selectedMatchId = null;
 
             clearDashboard();
             renderMatch(null);
+            exitToMatchBrowse();
 
             await refreshDashboard();
 
@@ -815,10 +1294,473 @@ if (deleteAllBtn) {
 }
 
 // ==============================
+// MULTI-SCREEN REFEREE CAMERA MENU & WEBRTC MONITOR (LOCKED ONCE SELECTED)
+// ==============================
+
+const CAM_RTC_CONFIG = {
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+};
+
+const CONFIRMED_CAMS_STORAGE_KEY = 'op_sby_confirmed_camera_slots';
+
+const CAMERA_SLOT_META = {
+    'red-1': { label: 'CAMERA 1 · RED TEAM', team: 'red' },
+    'red-2': { label: 'CAMERA 2 · RED TEAM', team: 'red' },
+    'blue-1': { label: 'CAMERA 1 · BLUE TEAM', team: 'blue' },
+    'blue-2': { label: 'CAMERA 2 · BLUE TEAM', team: 'blue' },
+    'green-1': { label: 'CAMERA 1 · GREEN TEAM', team: 'green' },
+    'green-2': { label: 'CAMERA 2 · GREEN TEAM', team: 'green' },
+    'yellow-1': { label: 'CAMERA 1 · YELLOW TEAM', team: 'yellow' },
+    'yellow-2': { label: 'CAMERA 2 · YELLOW TEAM', team: 'yellow' }
+};
+
+// Map<slotId, { ws, pc, tileEl, videoEl, statusEl, overlayEl }>
+const activeCameraFeeds = new Map();
+
+function saveConfirmedSlotsToStorage() {
+    try {
+        localStorage.setItem(
+            CONFIRMED_CAMS_STORAGE_KEY,
+            JSON.stringify([...activeCameraFeeds.keys()])
+        );
+    } catch (err) {
+        console.warn('Storage save error:', err);
+    }
+}
+
+function getConfirmedSlotsFromStorage() {
+    try {
+        const raw = localStorage.getItem(CONFIRMED_CAMS_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed.filter(id => CAMERA_SLOT_META[id]) : [];
+    } catch {
+        return [];
+    }
+}
+
+function syncCameraDropdownState() {
+    const slotSelect = document.getElementById('cameraSlotSelect');
+    const selectedText = document.getElementById('selectedCameraText');
+    const confirmBtn = document.getElementById('confirmCameraBtn');
+    if (!slotSelect) return;
+
+    [...slotSelect.options].forEach(opt => {
+        if (!opt.dataset.baseText) {
+            opt.dataset.baseText = opt.textContent.trim();
+        }
+        const isAlreadySelected = activeCameraFeeds.has(opt.value);
+        opt.disabled = isAlreadySelected;
+        opt.textContent = isAlreadySelected
+            ? `${opt.dataset.baseText} [SUDAH DIPILIH]`
+            : opt.dataset.baseText;
+    });
+
+    let currentOpt = slotSelect.options[slotSelect.selectedIndex];
+    if (!currentOpt || currentOpt.disabled) {
+        const nextAvailableIdx = [...slotSelect.options].findIndex(o => !o.disabled);
+        if (nextAvailableIdx !== -1) {
+            slotSelect.selectedIndex = nextAvailableIdx;
+            currentOpt = slotSelect.options[nextAvailableIdx];
+        } else {
+            currentOpt = null;
+        }
+    }
+
+    if (currentOpt && !currentOpt.disabled) {
+        if (selectedText) {
+            selectedText.textContent = `Pilihan: ${currentOpt.dataset.baseText}`;
+        }
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = '✓ CONFIRM CAMERA';
+        }
+    } else {
+        if (selectedText) {
+            selectedText.textContent = 'Semua 8 kamera sudah dipilih';
+        }
+        if (confirmBtn) {
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = 'SEMUA KAMERA AKTIF';
+        }
+    }
+}
+
+function switchAdminMenu(mode) {
+    activeViewMode = mode;
+
+    const navBrowse = document.getElementById('navBrowse');
+    const navOverview = document.getElementById('navOverview');
+    const navCamera = document.getElementById('navCamera');
+
+    const browseViewEl = document.getElementById('browseView');
+    const summaryViewEl = document.getElementById('matchSummaryView');
+    const matchWorkspaceEl = document.getElementById('matchWorkspace');
+    const overviewEl = document.getElementById('overview');
+    const lowerGridEl = document.querySelector('.lower-grid');
+    const cameraViewEl = document.getElementById('cameraView');
+
+    [navBrowse, navOverview, navCamera].forEach(el => {
+        if (el) el.classList.remove('active');
+    });
+
+    if (mode === 'summary') {
+        if (browseViewEl) browseViewEl.style.display = 'none';
+        if (matchWorkspaceEl) matchWorkspaceEl.style.display = 'none';
+        if (summaryViewEl) summaryViewEl.style.display = 'block';
+        return;
+    }
+
+    if (summaryViewEl) summaryViewEl.style.display = 'none';
+
+    if (mode === 'browse' || !selectedMatchId) {
+        activeViewMode = 'browse';
+        if (navBrowse) navBrowse.classList.add('active');
+        if (browseViewEl) browseViewEl.style.display = 'block';
+        if (matchWorkspaceEl) matchWorkspaceEl.style.display = 'none';
+        return;
+    }
+
+    if (browseViewEl) browseViewEl.style.display = 'none';
+    if (matchWorkspaceEl) matchWorkspaceEl.style.display = 'block';
+
+    if (mode === 'camera') {
+        if (navCamera) navCamera.classList.add('active');
+        if (overviewEl) overviewEl.style.display = 'none';
+        if (lowerGridEl) lowerGridEl.style.display = 'none';
+        if (cameraViewEl) cameraViewEl.style.display = 'block';
+    } else {
+        if (navOverview) navOverview.classList.add('active');
+
+        if (overviewEl) overviewEl.style.display = '';
+        if (lowerGridEl) lowerGridEl.style.display = '';
+        if (cameraViewEl) cameraViewEl.style.display = 'none';
+
+        if (tacticalMap) {
+            setTimeout(() => tacticalMap.invalidateSize(), 150);
+        }
+    }
+}
+
+function updateCameraGridLayout() {
+    const gridEl = document.getElementById('cameraFeedsGrid');
+    const emptyEl = document.getElementById('cameraGridEmpty');
+    const countBadge = document.getElementById('activeScreenCountBadge');
+    const count = activeCameraFeeds.size;
+
+    if (countBadge) {
+        countBadge.textContent = `${count} LAYAR AKTIF`;
+    }
+
+    if (emptyEl) {
+        emptyEl.style.display = count === 0 ? 'block' : 'none';
+    }
+
+    if (gridEl) {
+        gridEl.classList.toggle('multi-cam', count >= 2);
+    }
+}
+
+function setTileState(feed, statusText, isStreaming = false) {
+    if (!feed) return;
+    if (feed.statusEl) {
+        feed.statusEl.textContent = statusText;
+        feed.statusEl.classList.toggle('live', isStreaming);
+    }
+    if (feed.overlayEl) {
+        feed.overlayEl.style.display = isStreaming ? 'none' : 'flex';
+        const spanEl = feed.overlayEl.querySelector('span');
+        if (spanEl) {
+            spanEl.textContent = statusText === 'KAMERA OFFLINE'
+                ? 'Kamera wasit pada slot ini belum menyalakan Start Live.'
+                : 'Menunggu stream video dari perangkat kamera wasit...';
+        }
+    }
+}
+
+function removeCameraSlot(slotId, persist = true) {
+    const feed = activeCameraFeeds.get(slotId);
+    if (!feed) return;
+
+    if (feed.pc) {
+        feed.pc.close();
+    }
+    if (feed.ws) {
+        feed.ws.close();
+    }
+    if (feed.tileEl) {
+        feed.tileEl.remove();
+    }
+
+    activeCameraFeeds.delete(slotId);
+    updateCameraGridLayout();
+    syncCameraDropdownState();
+
+    if (persist) {
+        saveConfirmedSlotsToStorage();
+    }
+}
+
+function addOrReconnectCameraSlot(slotId, labelText, teamKey, persist = true) {
+    if (activeCameraFeeds.has(slotId)) {
+        syncCameraDropdownState();
+        return;
+    }
+
+    const gridEl = document.getElementById('cameraFeedsGrid');
+    if (!gridEl) return;
+
+    const tileEl = document.createElement('div');
+    tileEl.className = 'cam-feed-tile';
+    tileEl.dataset.slotId = slotId;
+
+    tileEl.innerHTML = `
+        <div class="cam-tile-header">
+            <span class="camera-badge-pill team-${teamKey}">${labelText}</span>
+            <div class="cam-tile-actions">
+                <span class="cam-tile-status">CONNECTING...</span>
+                <button type="button" class="btn-remove-cam" title="Tutup layar ini">✕</button>
+            </div>
+        </div>
+        <div class="camera-screen-wrapper">
+            <div class="camera-empty-overlay">
+                <strong>${labelText}</strong>
+                <span style="margin-top:6px;">Menyambungkan ke server kamera wasit...</span>
+            </div>
+            <video autoplay playsinline muted></video>
+        </div>
+    `;
+
+    const videoEl = tileEl.querySelector('video');
+    const statusEl = tileEl.querySelector('.cam-tile-status');
+    const overlayEl = tileEl.querySelector('.camera-empty-overlay');
+    const removeBtn = tileEl.querySelector('.btn-remove-cam');
+
+    const feed = {
+        ws: null,
+        pc: null,
+        tileEl,
+        videoEl,
+        statusEl,
+        overlayEl
+    };
+
+    removeBtn.addEventListener('click', () => {
+        removeCameraSlot(slotId, true);
+    });
+
+    gridEl.appendChild(tileEl);
+    activeCameraFeeds.set(slotId, feed);
+    updateCameraGridLayout();
+    syncCameraDropdownState();
+
+    if (persist) {
+        saveConfirmedSlotsToStorage();
+    }
+
+    const wsUrl = `${WS_BASE}/ws/referee-cam/default/${encodeURIComponent(slotId)}?role=admin`;
+    const ws = new WebSocket(wsUrl);
+    feed.ws = ws;
+
+    ws.onopen = () => {
+        ws.send(JSON.stringify({ type: 'admin-ready', slot_id: slotId }));
+        setTileState(feed, 'STANDBY · WAITING FEED', false);
+    };
+
+    ws.onmessage = async (event) => {
+        const msg = JSON.parse(event.data);
+
+        if (msg.type === 'offer') {
+            if (feed.pc) feed.pc.close();
+            const pc = new RTCPeerConnection(CAM_RTC_CONFIG);
+            feed.pc = pc;
+
+            pc.ontrack = (e) => {
+                if (e.streams && e.streams[0] && feed.videoEl) {
+                    feed.videoEl.srcObject = e.streams[0];
+                    setTileState(feed, 'LIVE FEED', true);
+                }
+            };
+
+            pc.onicecandidate = (e) => {
+                if (e.candidate && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'ice-candidate',
+                        candidate: e.candidate,
+                        slot_id: slotId
+                    }));
+                }
+            };
+
+            await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            ws.send(JSON.stringify({
+                type: 'answer',
+                sdp: pc.localDescription,
+                slot_id: slotId
+            }));
+        } else if (msg.type === 'ice-candidate' && msg.candidate && feed.pc) {
+            try {
+                await feed.pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+            } catch (err) {
+                console.warn(`Admin Camera ICE error (${slotId}):`, err);
+            }
+        } else if (msg.type === 'referee-status') {
+            if (!msg.online) {
+                if (feed.videoEl) feed.videoEl.srcObject = null;
+                setTileState(feed, 'KAMERA OFFLINE', false);
+            }
+        }
+    };
+
+    ws.onerror = () => {
+        setTileState(feed, 'SIGNALING ERROR', false);
+    };
+}
+
+function syncCameraFeedsFromStorage() {
+    const storedSlots = getConfirmedSlotsFromStorage();
+    const storedSet = new Set(storedSlots);
+
+    for (const existingId of [...activeCameraFeeds.keys()]) {
+        if (!storedSet.has(existingId)) {
+            removeCameraSlot(existingId, false);
+        }
+    }
+
+    for (const slotId of storedSlots) {
+        if (!activeCameraFeeds.has(slotId)) {
+            const meta = CAMERA_SLOT_META[slotId];
+            addOrReconnectCameraSlot(slotId, meta.label, meta.team, false);
+        }
+    }
+
+    syncCameraDropdownState();
+}
+
+function initNavigationAndCameraMenu() {
+    const navBrowse = document.getElementById('navBrowse');
+    const navOverview = document.getElementById('navOverview');
+    const navCamera = document.getElementById('navCamera');
+    const backToBrowseBtn = document.getElementById('backToBrowseBtn');
+    const summaryToBrowseBtn = document.getElementById('summaryToBrowseBtn');
+    const refreshBrowseBtn = document.getElementById('refreshBrowseBtn');
+
+    const slotSelect = document.getElementById('cameraSlotSelect');
+    const selectedText = document.getElementById('selectedCameraText');
+    const confirmBtn = document.getElementById('confirmCameraBtn');
+    const clearAllCamBtn = document.getElementById('clearAllCamerasBtn');
+
+    syncCameraFeedsFromStorage();
+
+    window.addEventListener('storage', (e) => {
+        if (e.key === CONFIRMED_CAMS_STORAGE_KEY) {
+            syncCameraFeedsFromStorage();
+        }
+    });
+
+    if (navBrowse) {
+        navBrowse.addEventListener('click', (e) => {
+            e.preventDefault();
+            exitToMatchBrowse();
+            refreshDashboard();
+        });
+    }
+
+    if (backToBrowseBtn) {
+        backToBrowseBtn.addEventListener('click', () => {
+            exitToMatchBrowse();
+            refreshDashboard();
+        });
+    }
+
+    if (summaryToBrowseBtn) {
+        summaryToBrowseBtn.addEventListener('click', () => {
+            exitToMatchBrowse();
+            refreshDashboard();
+        });
+    }
+
+    if (refreshBrowseBtn) {
+        refreshBrowseBtn.addEventListener('click', () => {
+            refreshDashboard();
+        });
+    }
+
+    if (navOverview) {
+        navOverview.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (activeViewMode === 'summary') {
+                alert('Pertandingan sudah selesai. Menu Overview sudah dikunci.');
+                return;
+            }
+            if (!selectedMatchId) {
+                alert('Pilih match aktif terlebih dahulu di halaman Match Browse.');
+                return;
+            }
+            switchAdminMenu('overview');
+        });
+    }
+
+    if (navCamera) {
+        navCamera.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (activeViewMode === 'summary') {
+                alert('Pertandingan sudah selesai. Menu Camera sudah dikunci.');
+                return;
+            }
+            if (!selectedMatchId) {
+                alert('Pilih match aktif terlebih dahulu di halaman Match Browse.');
+                return;
+            }
+            switchAdminMenu('camera');
+            syncCameraFeedsFromStorage();
+        });
+    }
+
+    if (slotSelect && selectedText) {
+        slotSelect.addEventListener('change', () => {
+            const opt = slotSelect.options[slotSelect.selectedIndex];
+            if (!opt || opt.disabled) {
+                syncCameraDropdownState();
+                return;
+            }
+            selectedText.textContent = `Pilihan: ${opt.dataset.baseText || opt.textContent}`;
+        });
+    }
+
+    if (confirmBtn && slotSelect) {
+        confirmBtn.addEventListener('click', () => {
+            const opt = slotSelect.options[slotSelect.selectedIndex];
+            if (!opt || opt.disabled || activeCameraFeeds.has(opt.value)) {
+                syncCameraDropdownState();
+                return;
+            }
+            addOrReconnectCameraSlot(
+                opt.value,
+                opt.dataset.label || (opt.dataset.baseText || opt.textContent).toUpperCase(),
+                opt.dataset.team || 'red',
+                true
+            );
+        });
+    }
+
+    if (clearAllCamBtn) {
+        clearAllCamBtn.addEventListener('click', () => {
+            [...activeCameraFeeds.keys()].forEach(slotId => removeCameraSlot(slotId, false));
+            saveConfirmedSlotsToStorage();
+            syncCameraDropdownState();
+        });
+    }
+}
+
+// ==============================
 // INITIALIZE
 // ==============================
 
 initTacticalMap();
+initNavigationAndCameraMenu();
+switchAdminMenu('browse');
 refreshDashboard();
 
 refreshTimer = setInterval(() => {

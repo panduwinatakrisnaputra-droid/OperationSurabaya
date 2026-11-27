@@ -47,6 +47,12 @@ let ghostQrRestartGameplayCamera = false;
 let ghostModeUntil = null;
 let ghostModeTickHandle = null;
 
+
+// [TAMBAHAN GPS]
+let gpsWatchId = null;
+let gpsSendTimer = null;
+let latestGpsCoords = null;
+
 // ==========================================
 // API CONFIGURATION & STATE BROADCASTER
 // ==========================================
@@ -580,6 +586,87 @@ function stopGunDetectionLoop() {
 // GAMEPLAY SCREEN
 // ==========================================
 
+// ==========================================
+// GAMEPLAY GPS LOCATION TRACKING [TAMBAHAN GPS]
+// ==========================================
+
+function setGpsBadge(text, confirmed = false) {
+  const badge = $('gpsStatus');
+  if (!badge) return;
+  badge.textContent = text;
+  badge.style.color = confirmed ? '#00ff88' : '';
+  badge.style.borderColor = confirmed ? 'rgba(0, 255, 136, 0.45)' : '';
+}
+
+async function sendCurrentGpsLocation() {
+  if (!player || !match || !gameplayOpened || !latestGpsCoords) return;
+
+  try {
+    const res = await api(`/api/matches/${match.id}/movement`, {
+      method: 'POST',
+      body: JSON.stringify({
+        player_id: player.id,
+        latitude: latestGpsCoords.latitude,
+        longitude: latestGpsCoords.longitude
+      })
+    });
+    setGpsBadge('GPS CONFIRMED', true);
+    console.log('[GPS] Terkirim:', res);
+  } catch (error) {
+    setGpsBadge('GPS SYNC ERROR', false);
+    console.warn('[GPS] Gagal mengirim lokasi:', error.message);
+  }
+}
+
+function startGameplayGpsTracking() {
+  stopGameplayGpsTracking();
+
+  if (!('geolocation' in navigator)) {
+    setGpsBadge('GPS UNSUPPORTED', false);
+    console.warn('[GPS] Geolocation tidak didukung pada browser ini.');
+    return;
+  }
+
+  setGpsBadge('LOCATING GPS...', false);
+  console.log('[GPS] Memulai pelacakan lokasi pemain...');
+
+  gpsWatchId = navigator.geolocation.watchPosition(
+    (position) => {
+      const isFirstFix = !latestGpsCoords;
+      latestGpsCoords = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude
+      };
+      if (isFirstFix) {
+        sendCurrentGpsLocation();
+      }
+    },
+    (error) => {
+      setGpsBadge('GPS BLOCKED / ERROR', false);
+      console.warn('[GPS] Tracking error:', error.message);
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 2000,
+      timeout: 10000
+    }
+  );
+
+  gpsSendTimer = setInterval(sendCurrentGpsLocation, 3000);
+}
+
+function stopGameplayGpsTracking() {
+  if (gpsWatchId !== null && 'geolocation' in navigator) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
+  if (gpsSendTimer) {
+    clearInterval(gpsSendTimer);
+    gpsSendTimer = null;
+  }
+  latestGpsCoords = null;
+  setGpsBadge('GPS STANDBY', false);
+}
 function openGameplay() {
   if (gameplayOpened) return;
 
@@ -613,6 +700,7 @@ function openGameplay() {
   $('gameplayTeamBadge').style.color = teamColor(teamName);
 
   startGameplayCamera();
+  startGameplayGpsTracking();
   startGameplayHealthPolling();
   startGameplayTimer();
   refreshGameplayWeapon();
@@ -1164,6 +1252,7 @@ async function refreshGameplayHealth() {
       $('operationStatus').textContent = 'COMPLETED';
       $('gameplayStatus').textContent = 'COMPLETED';
       stopGunDetectionLoop();
+      stopGameplayGpsTracking(); // <-- TAMBAHAN
       persistPortalContext('gameplay');
       return;
     }
@@ -1721,6 +1810,7 @@ async function pollBaseShutdownNotifications() {
         if ($('gameplayStatus')) $('gameplayStatus').textContent = `${winTeam} WIN`;
         if (match) match.status = 'completed';
         stopGunDetectionLoop();
+        stopGameplayGpsTracking(); // <-- TAMBAHAN
         persistPortalContext('gameplay');
         return;
       }
@@ -1806,6 +1896,7 @@ async function finishBaseShutdown(payload) {
         if (status) status.textContent = `${result.winner_team_code} WIN`;
         if (match) match.status = 'completed';
         stopGunDetectionLoop();
+        stopGameplayGpsTracking(); // <-- TAMBAHAN
         persistPortalContext('gameplay');
         setTimeout(() => stopBaseShutdownScanner(false), 2500);
       } catch (error) {
@@ -1928,6 +2019,7 @@ $('gameplayLogoutBtn').addEventListener('click', async () => {
       await api('/api/players/logout', { method: 'POST', body: JSON.stringify({ access_token: accessToken }) });
     }
     stopGameplayCamera();
+    stopGameplayGpsTracking();
     gameplayOpened = false;
     stopBaseShutdownNotificationPolling();
     resetPortal('Logout berhasil. Silakan login kembali.');
@@ -1992,6 +2084,7 @@ $('leaveTeamBtn').addEventListener('click', async () => {
 function resetPortal(message) {
   if (pollHandle) clearInterval(pollHandle);
   stopGameplayCamera();
+  stopGameplayGpsTracking();
   stopGameplayHealthPolling();
   stopWeaponQrScanner();
   stopBaseShutdownNotificationPolling();
