@@ -11,7 +11,12 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 
+
 CORS_ORIGINS = [
+    # Production - Player Portal
+    "https://operationsurabaya.pipip.my.id",
+
+    # Local development
     "http://localhost:5500",
     "http://127.0.0.1:5500",
     "http://localhost:5501",
@@ -21,5 +26,6 @@ CORS_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:8000",
-    "http://127.0.0.1:8000"
+    "http://127.0.0.1:8000",
 ]
+
