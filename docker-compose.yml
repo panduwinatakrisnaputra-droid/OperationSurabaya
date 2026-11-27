@@ -1,0 +1,9 @@
+services:
+  app:
+    image: ${IMAGE_NAME:-ghcr.io/panduwinatakrisnaputra-droid/operationsurabaya:latest}
+    container_name: operation-surabaya
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8001}:8000"
+    env_file:
+      - .env
