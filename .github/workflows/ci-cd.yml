@@ -34,7 +34,7 @@ jobs:
       - name: Install lightweight CI dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ruff fastapi uvicorn python-socketio python-dotenv supabase
+          pip install ruff fastapi uvicorn python-socketio python-dotenv supabase livekit-api
 
       - name: Syntax check (compileall)
         run: python -m compileall -q app config routes main.py
