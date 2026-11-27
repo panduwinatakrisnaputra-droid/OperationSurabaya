@@ -1,4 +1,4 @@
-const API_BASE = window.OPS_API_BASE || (window.location.protocol === 'file:' ? 'https://operationsurabaya.pipip.my.id/player-app/' : window.location.origin);
+const API_BASE = window.OPS_API_BASE || (window.location.protocol === 'file:' ? 'https://operationsurabaya.pipip.my.id' : window.location.origin);
 const WS_BASE = API_BASE.replace(/^http/, "ws");
 const RTC_CONFIG = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],

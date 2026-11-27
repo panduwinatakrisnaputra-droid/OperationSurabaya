@@ -25,7 +25,7 @@ if not os.path.exists(CASCADE_PATH):
     CASCADE_PATH = "haarcascade_frontalface_default.xml"
 
 detector = cv2.CascadeClassifier(CASCADE_PATH) if os.path.exists(CASCADE_PATH) else None
-API_BASE = "https://operationsurabaya.pipip.my.id/player-app/"
+API_BASE = "https://operationsurabaya.pipip.my.id"
 
 
 def send_api(endpoint: str, data: dict):

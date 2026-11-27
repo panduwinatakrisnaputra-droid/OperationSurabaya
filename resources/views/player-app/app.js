@@ -3,7 +3,7 @@
 // PLAYER PORTAL - APP.JS (SYNCED COMMS + YOLO WEAPON & PLATE LOOP + CROSSHAIR)
 // ==========================================
 
-const API_BASE = window.OPS_API_BASE || (window.location.protocol === 'file:' ? 'https://operationsurabaya.pipip.my.id/player-app/' : window.location.origin);
+const API_BASE = window.OPS_API_BASE || (window.location.protocol === 'file:' ? 'https://operationsurabaya.pipip.my.id' : window.location.origin);
 window.OPS_API_BASE = API_BASE;
 
 const $ = (id) => document.getElementById(id);
