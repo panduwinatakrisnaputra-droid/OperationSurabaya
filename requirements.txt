@@ -3,33 +3,17 @@ uvicorn[standard]
 python-dotenv
 supabase
 
-# Face Recognition (harus ada di venv yang sama)
-opencv-contrib-python
-face-recognition
-numpy
-
-#comm-room
-socketio
-livekit
-
-fastapi
-uvicorn[standard]
-python-dotenv
-supabase
-
 # Face Recognition
-opencv-contrib-python
+opencv-python<5
+opencv-contrib-python<5
 face-recognition
 face_recognition_models
 numpy
-setuptools==80.9.0
 
 # Communication Room
 python-socketio[asyncio_client]
 livekit
 livekit-api
 
-#tag
+# Tag / Object Detection
 ultralytics
-opencv-python<5
-opencv-contrib-python<5
