@@ -30,7 +30,8 @@ class PlayerShootRequest(BaseModel):
     image: Optional[str] = Field(default=None, max_length=3_000_000)
 
 class GunDetectRequest(BaseModel):
-    image: str = Field(min_length=1, max_length=3_000_000)
+  image: str = Field(min_length=1, max_length=3_000_000)
+  player_id: Optional[str] = None
 
 class BaseShutdownRequest(BaseModel):
     player_id: str = Field(min_length=1)

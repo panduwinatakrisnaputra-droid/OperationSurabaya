@@ -16,7 +16,7 @@ WEIGHTS_PATH = MODEL_DIR / "yolov4-tiny-obj_best.weights"
 NAMES_PATH = MODEL_DIR / "obj.names"
 
 TARGET_CLASS = "cardboard_gun_phone"
-CONF_THRESHOLD = 0.45
+CONF_THRESHOLD = 0.30
 NMS_THRESHOLD = 0.4
 
 _model = None

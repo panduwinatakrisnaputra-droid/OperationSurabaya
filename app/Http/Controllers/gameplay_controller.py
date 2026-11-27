@@ -20,22 +20,132 @@ SHOOT_COOLDOWN_SECONDS = 1.0
 _last_shot_at = {}  # player_id -> monotonic time tembakan terakhir
 
 
+_detect_frame_counter = 0
+
 def _run_gun_detection(image_b64):
-    """Jalankan YOLO pada frame base64. Mengembalikan dict hasil deteksi."""
-    from app.Services import gun_detector
+    """Jalankan YOLO senjata + deteksi plat tim & nomor pada frame base64."""
+    from app.Services import gun_detector, plat_service
+
     frame = gun_detector.decode_image(image_b64)
     if frame is None:
         raise HTTPException(status_code=400, detail="Gambar tidak valid")
     try:
-        return gun_detector.detect_gun(frame)
+        gun_result = gun_detector.detect_gun(frame)
     except RuntimeError as error:
         print("GUN DETECTOR ERROR:", repr(error))
         raise HTTPException(status_code=503, detail=str(error))
 
+    try:
+        plat_result = plat_service.detect_plates(frame)
+    except Exception as error:
+        print("PLAT DETECTOR ERROR:", repr(error))
+        plat_result = {"detected": False, "plates": [], "target_plate": None}
+
+    return {
+        **gun_result,
+        "plat": plat_result,
+    }
+
+def _find_target_by_plate(match_id: str, target_plate: dict):
+  """Cari player_id di room berdasarkan team_code dan player_number dari plat."""
+  target_number = target_plate.get("nomor")
+  target_team_code = str(target_plate.get("team_code", "")).upper()
+
+  members_res = (
+      supabase.table("match_players")
+      .select("player_id, team_id, is_eliminated")
+      .eq("match_id", match_id)
+      .execute()
+  )
+  members = members_res.data or []
+  if not members:
+    return None
+
+  player_ids = [m["player_id"] for m in members]
+  players_res = (
+      supabase.table("players")
+      .select("id, player_number")
+      .in_("id", player_ids)
+      .execute()
+  )
+  number_map = {
+      p["id"]: p.get("player_number") for p in (players_res.data or [])
+  }
+
+  team_ids = list({m["team_id"] for m in members if m.get("team_id")})
+  teams_res = (
+      supabase.table("teams")
+      .select("id, team_code")
+      .in_("id", team_ids)
+      .execute()
+  )
+  team_map = {
+      t["id"]: str(t.get("team_code", "")).upper()
+      for t in (teams_res.data or [])
+  }
+
+  for m in members:
+    pid = m["player_id"]
+    if number_map.get(pid) == target_number and (
+        team_map.get(m.get("team_id")) == target_team_code
+    ):
+      return pid
+  return None
+
+_shooter_team_cache = {}  # (match_id, player_id) -> team_code
+
+
+def _get_shooter_team_cached(match_id: str, player_id: str):
+  key = (match_id, player_id)
+  if key in _shooter_team_cache:
+    return _shooter_team_cache[key]
+  shooter_res = (
+      supabase.table("match_players")
+      .select("team_id")
+      .eq("match_id", match_id)
+      .eq("player_id", player_id)
+      .limit(1)
+      .execute()
+  )
+  if shooter_res.data:
+    team_res = (
+        supabase.table("teams")
+        .select("team_code")
+        .eq("id", shooter_res.data[0]["team_id"])
+        .limit(1)
+        .execute()
+    )
+    if team_res.data:
+      code = str(team_res.data[0]["team_code"]).upper()
+      _shooter_team_cache[key] = code
+      return code
+  return None
+
 
 def detect_gun(match_id: str, data: GunDetectRequest):
-    result = _run_gun_detection(data.image)
-    return {"success": True, **result}
+  result = _run_gun_detection(data.image)
+  result = result or {}
+  target_plate = (result.get("plat") or {}).get("target_plate")
+
+  relation = "unknown"
+  if target_plate and data.player_id:
+    shooter_team = _get_shooter_team_cached(match_id, data.player_id)
+    if shooter_team:
+      target_team = str(target_plate.get("team_code", "")).upper()
+      relation = "teammate" if shooter_team == target_team else "enemy"
+  elif target_plate:
+    relation = "detected"
+
+  can_shoot = bool(
+      result.get("detected") and target_plate and relation != "teammate"
+  )
+
+  return {
+      "success": True,
+      **result,
+      "relation": relation,
+      "can_shoot": can_shoot,
+  }
 
 def get_match_health(match_id: str):
     try:
@@ -446,139 +556,202 @@ async def heal_player(match_id: str, data: PlayerHealRequest):
 
 
 def shoot_player(match_id: str, data: PlayerShootRequest):
+  try:
+    match_response = (
+        supabase.table("matches")
+        .select("id, status")
+        .eq("id", match_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not match_response.data:
+      raise HTTPException(
+          status_code=404, detail="Pertandingan tidak ditemukan"
+      )
+
+    if match_response.data[0].get("status") != "active":
+      raise HTTPException(status_code=400, detail="Pertandingan belum aktif")
+
+    member_response = (
+        supabase.table("match_players")
+        .select("player_id, team_id, current_health, is_eliminated, weapon_level")
+        .eq("match_id", match_id)
+        .eq("player_id", data.player_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not member_response.data:
+      raise HTTPException(
+          status_code=403, detail="Pemain tidak tergabung dalam pertandingan"
+      )
+
+    member = member_response.data[0]
+    if member.get("is_eliminated") or (
+        member.get("current_health") is not None
+        and member.get("current_health") <= 0
+    ):
+      raise HTTPException(
+          status_code=400,
+          detail="Pemain sudah tereliminasi dan tidak dapat menembak",
+      )
+
+    weapon_level = int(member.get("weapon_level") or 1)
+    weapon_damage = WEAPON_DAMAGE_BY_LEVEL.get(weapon_level, 10)
+
+    # Tembakan hanya sah bila pistol kardus musuh terdeteksi pada frame kamera.
+    if not data.image:
+      raise HTTPException(
+          status_code=400, detail="Frame kamera diperlukan untuk menembak"
+      )
+
+    now = time.monotonic()
+    if now - _last_shot_at.get(data.player_id, 0) < SHOOT_COOLDOWN_SECONDS:
+      raise HTTPException(status_code=429, detail="Senjata sedang cooldown")
+
+    from app.Services import gun_detector
+
+    frame = gun_detector.decode_image(data.image)
+    if frame is None:
+      raise HTTPException(status_code=400, detail="Gambar tidak valid")
     try:
-        match_response = (
-            supabase.table("matches")
-            .select("id, status")
-            .eq("id", match_id)
-            .limit(1)
-            .execute()
+      detection = gun_detector.detect_gun(frame)
+    except RuntimeError as error:
+      raise HTTPException(status_code=503, detail=str(error))
+
+    if not detection["detected"]:
+      raise HTTPException(
+          status_code=400,
+          detail="Musuh tidak terdeteksi (pistol kardus tidak terlihat)",
+      )
+
+    target_plate = None
+    target_player_id = data.target_player_id
+
+    if not target_player_id:
+      from app.Services import plat_service
+
+      plat_res = plat_service.detect_plates(frame)
+      target_plate = plat_res.get("target_plate")
+      if not target_plate:
+        raise HTTPException(
+            status_code=400,
+            detail="Plat tim & nomor pemain musuh tidak terbaca kamera",
         )
-
-        if not match_response.data:
-            raise HTTPException(status_code=404, detail="Pertandingan tidak ditemukan")
-
-        if match_response.data[0].get("status") != "active":
-            raise HTTPException(status_code=400, detail="Pertandingan belum aktif")
-
-        member_response = (
-            supabase.table("match_players")
-            .select("player_id, team_id, current_health, is_eliminated, weapon_level")
-            .eq("match_id", match_id)
-            .eq("player_id", data.player_id)
-            .limit(1)
-            .execute()
+      target_player_id = _find_target_by_plate(match_id, target_plate)
+      if not target_player_id:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Pemain Tim"
+                f" {str(target_plate.get('team_code', '')).upper()}"
+                f" #{target_plate['nomor']} tidak ditemukan di room"
+            ),
         )
+      
+    if target_player_id == data.player_id:
+      raise HTTPException(
+          status_code=400, detail="Tidak dapat menembak diri sendiri"
+      )
 
-        if not member_response.data:
-            raise HTTPException(status_code=403, detail="Pemain tidak tergabung dalam pertandingan")
+    target_response = (
+        supabase.table("match_players")
+        .select("player_id, team_id, is_eliminated, current_health")
+        .eq("match_id", match_id)
+        .eq("player_id", target_player_id)
+        .limit(1)
+        .execute()
+    )
+    if not target_response.data:
+      raise HTTPException(
+          status_code=404, detail="Target tidak tergabung dalam pertandingan"
+      )
+    target = target_response.data[0]
+    if target.get("team_id") == member.get("team_id"):
+      raise HTTPException(
+          status_code=400, detail="Tidak dapat menembak rekan satu tim"
+      )
+    if target.get("is_eliminated"):
+      raise HTTPException(status_code=400, detail="Target sudah tereliminasi")
 
-        member = member_response.data[0]
-        if member.get("is_eliminated") or (member.get("current_health") is not None and member.get("current_health") <= 0):
-            raise HTTPException(status_code=400, detail="Pemain sudah tereliminasi dan tidak dapat menembak")
+    _last_shot_at[data.player_id] = now
 
-        weapon_level = int(member.get("weapon_level") or 1)
-        weapon_damage = WEAPON_DAMAGE_BY_LEVEL.get(weapon_level, 10)
+    names = {}
+    names_response = (
+        supabase.table("players")
+        .select("id, username, full_name")
+        .in_("id", [data.player_id, target_player_id])
+        .execute()
+    )
+    for row in names_response.data or []:
+      names[row["id"]] = (
+          row.get("full_name") or row.get("username") or "Pemain"
+      )
+    player_name = names.get(data.player_id, "Pemain")
+    target_name = names.get(target_player_id, "Target")
 
-        # Tembakan hanya sah bila pistol kardus musuh terdeteksi pada frame kamera.
-        if not data.image:
-            raise HTTPException(status_code=400, detail="Frame kamera diperlukan untuk menembak")
-        if not data.target_player_id:
-            raise HTTPException(status_code=400, detail="Pilih target musuh terlebih dahulu")
-        if data.target_player_id == data.player_id:
-            raise HTTPException(status_code=400, detail="Tidak dapat menembak diri sendiri")
+    # Kurangi HP target (Ghost Mode & eliminasi ditangani update_player_health)
+    health_result = update_player_health(
+        match_id,
+        HealthUpdate(
+            player_id=target_player_id, action="damage", amount=weapon_damage
+        ),
+    )
+    blocked = bool(health_result.get("blocked_by_ghost_mode"))
+    damage_applied = 0 if blocked else weapon_damage
 
-        now = time.monotonic()
-        if now - _last_shot_at.get(data.player_id, 0) < SHOOT_COOLDOWN_SECONDS:
-            raise HTTPException(status_code=429, detail="Senjata sedang cooldown")
+    event_response = (
+        supabase.table("game_events")
+        .insert({
+            "match_id": match_id,
+            "actor_player_id": data.player_id,
+            "target_player_id": target_player_id,
+            "event_type": "player_damage",
+            "description": (
+                f"{player_name} menembak {target_name} (Weapon"
+                f" Lv.{weapon_level}) -{damage_applied} HP"
+                + (" [Ghost Mode]" if blocked else "")
+            ),
+            "event_data": {
+                "action": "shoot",
+                "weapon_level": weapon_level,
+                "weapon_damage": weapon_damage,
+                "damage_applied": damage_applied,
+                "target_health": health_result.get("current_health"),
+                "target_eliminated": health_result.get("is_eliminated", False),
+                "detection_confidence": detection["confidence"],
+                "plat_detected": target_plate,
+            },
+        })
+        .execute()
+    )
 
-        detection = _run_gun_detection(data.image)
-        if not detection["detected"]:
-            raise HTTPException(status_code=400, detail="Musuh tidak terdeteksi (pistol kardus tidak terlihat)")
-        if not detection.get("on_target"):
-            raise HTTPException(status_code=400, detail="Meleset: crosshair tidak mengenai pistol musuh")
+    return {
+        "success": True,
+        "message": (
+            "Tembakan mengenai target"
+            if not blocked
+            else "Target kebal (Ghost Mode)"
+        ),
+        "weapon_level": weapon_level,
+        "weapon_damage": weapon_damage,
+        "damage_applied": damage_applied,
+        "target_player_id": target_player_id,
+        "target_plate": target_plate,
+        "target_health": health_result.get("current_health"),
+        "target_eliminated": health_result.get("is_eliminated", False),
+        "blocked_by_ghost_mode": blocked,
+        "event": event_response.data[0] if event_response.data else None,
+    }
 
-        target_response = (
-            supabase.table("match_players")
-            .select("player_id, team_id, is_eliminated, current_health")
-            .eq("match_id", match_id)
-            .eq("player_id", data.target_player_id)
-            .limit(1)
-            .execute()
-        )
-        if not target_response.data:
-            raise HTTPException(status_code=404, detail="Target tidak tergabung dalam pertandingan")
-        target = target_response.data[0]
-        if target.get("team_id") == member.get("team_id"):
-            raise HTTPException(status_code=400, detail="Tidak dapat menembak rekan satu tim")
-        if target.get("is_eliminated"):
-            raise HTTPException(status_code=400, detail="Target sudah tereliminasi")
-
-        _last_shot_at[data.player_id] = now
-
-        names = {}
-        names_response = (
-            supabase.table("players")
-            .select("id, username, full_name")
-            .in_("id", [data.player_id, data.target_player_id])
-            .execute()
-        )
-        for row in names_response.data or []:
-            names[row["id"]] = row.get("full_name") or row.get("username") or "Pemain"
-        player_name = names.get(data.player_id, "Pemain")
-        target_name = names.get(data.target_player_id, "Target")
-
-        # Kurangi HP target (Ghost Mode & eliminasi ditangani update_player_health)
-        health_result = update_player_health(
-            match_id,
-            HealthUpdate(player_id=data.target_player_id, action="damage", amount=weapon_damage),
-        )
-        blocked = bool(health_result.get("blocked_by_ghost_mode"))
-        damage_applied = 0 if blocked else weapon_damage
-
-        event_response = (
-            supabase.table("game_events")
-            .insert({
-                "match_id": match_id,
-                "actor_player_id": data.player_id,
-                "target_player_id": data.target_player_id,
-                "event_type": "player_damage",
-                "description": (
-                    f"{player_name} menembak {target_name} (Weapon Lv.{weapon_level}) "
-                    f"-{damage_applied} HP" + (" [Ghost Mode]" if blocked else "")
-                ),
-                "event_data": {
-                    "action": "shoot",
-                    "weapon_level": weapon_level,
-                    "weapon_damage": weapon_damage,
-                    "damage_applied": damage_applied,
-                    "target_health": health_result.get("current_health"),
-                    "target_eliminated": health_result.get("is_eliminated", False),
-                    "detection_confidence": detection["confidence"],
-                }
-            })
-            .execute()
-        )
-
-        return {
-            "success": True,
-            "message": "Tembakan mengenai target" if not blocked else "Target kebal (Ghost Mode)",
-            "weapon_level": weapon_level,
-            "weapon_damage": weapon_damage,
-            "damage_applied": damage_applied,
-            "target_player_id": data.target_player_id,
-            "target_health": health_result.get("current_health"),
-            "target_eliminated": health_result.get("is_eliminated", False),
-            "blocked_by_ghost_mode": blocked,
-            "event": event_response.data[0] if event_response.data else None
-        }
-
-    except HTTPException:
-        raise
-    except Exception as error:
-        print("SHOOT ERROR:", repr(error))
-        raise HTTPException(status_code=500, detail="Gagal mencatat aktivitas tembakan")
-
+  except HTTPException:
+    raise
+  except Exception as error:
+    print("SHOOT ERROR:", repr(error))
+    raise HTTPException(
+        status_code=500, detail="Gagal mencatat aktivitas tembakan"
+    )
 
 # ==========================================
 # BASE SHUTDOWN CONTROLLERS

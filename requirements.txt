@@ -28,3 +28,8 @@ setuptools==80.9.0
 python-socketio[asyncio_client]
 livekit
 livekit-api
+
+#tag
+ultralytics
+opencv-python<5
+opencv-contrib-python<5

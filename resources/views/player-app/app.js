@@ -1,6 +1,6 @@
 // ==========================================
 // OPERATION: SURABAYA
-// PLAYER PORTAL - APP.JS (SYNCED COMMS + YOLO WEAPON LOOP + CROSSHAIR & FULLSCREEN)
+// PLAYER PORTAL - APP.JS (SYNCED COMMS + YOLO WEAPON & PLATE LOOP + CROSSHAIR)
 // ==========================================
 
 const API_BASE = window.OPS_API_BASE || 'http://127.0.0.1:8000';
@@ -30,6 +30,9 @@ let latestGunDetection = {
   on_target: false,
   confidence: 0,
   box: null,
+  plat: null,
+  relation: 'unknown',
+  can_shoot: false,
   updatedAt: 0
 };
 let latestMatchPlayers = [];
@@ -271,7 +274,7 @@ async function startGameplayCamera() {
 }
 
 // ==========================================
-// YOLOv4-TINY WEAPON DETECTION & TARGET SYNC
+// YOLOv4-TINY WEAPON & YOLO11 PLATE DETECTION
 // ==========================================
 
 function syncEnemyTargets(playersList = []) {
@@ -318,62 +321,106 @@ function syncEnemyTargets(playersList = []) {
   updateShootButtonReadiness();
 }
 
+function getOrCreatePlateBox() {
+  const gunBox = $('gunBox');
+  if (!gunBox || !gunBox.parentElement) return { plateBox: null, plateLabel: null };
+  let plateBox = $('plateBox');
+  if (!plateBox) {
+    plateBox = gunBox.cloneNode(true);
+    plateBox.id = 'plateBox';
+    const lbl = plateBox.querySelector('#gunBoxLabel');
+    if (lbl) lbl.id = 'plateBoxLabel';
+    gunBox.parentElement.appendChild(plateBox);
+  }
+  return { plateBox, plateLabel: $('plateBoxLabel') };
+}
+
 function renderGunDetectionOverlay(detection) {
   const boxEl = $('gunBox');
   const labelEl = $('gunBoxLabel');
   const statusEl = $('gunStatus');
   const crosshairEl = $('crosshair');
+  const { plateBox, plateLabel } = getOrCreatePlateBox();
 
-  const isLocked = Boolean(detection && detection.detected && detection.on_target);
+  const targetPlate = detection?.plat?.target_plate || null;
+  const relation = detection?.relation || 'unknown';
+  const gunDetected = Boolean(detection && detection.detected && detection.box);
+  const isTeammate = relation === 'teammate';
+  const isReadyToFire = Boolean(gunDetected && targetPlate && !isTeammate);
+
+  if (targetPlate && !isTeammate && $('targetSelect')) {
+    const matchedEnemy = (latestMatchPlayers || []).find(
+      (p) =>
+        String(p.team_code || '').toUpperCase() === String(targetPlate.team_code || '').toUpperCase() &&
+        Number(p.player_number) === Number(targetPlate.nomor) &&
+        !p.is_eliminated &&
+        Number(p.current_health ?? 100) > 0
+    );
+    if (matchedEnemy) {
+      $('targetSelect').value = matchedEnemy.player_id;
+    }
+  }
 
   if (crosshairEl) {
-    crosshairEl.classList.toggle('on-target', isLocked);
+    crosshairEl.classList.toggle('on-target', isReadyToFire || gunDetected);
   }
 
-  if (!detection || !detection.detected || !detection.box) {
-    if (boxEl) {
-      boxEl.classList.add('hidden');
-      boxEl.classList.remove('on-target');
-    }
-    if (statusEl) {
-      statusEl.classList.remove('locked');
-      statusEl.textContent = cameraStream ? 'SCANNING WEAPON...' : 'CAMERA OFF';
-      statusEl.style.color = '#94a3b8';
-    }
-    return;
-  }
-
-  const confPct = Math.round((Number(detection.confidence) || 0) * 100);
-  const { x, y, w, h } = detection.box;
-
+  // 1. Gambar kotak khusus PISTOL
   if (boxEl) {
-    boxEl.classList.remove('hidden');
-    boxEl.classList.toggle('on-target', isLocked);
-    boxEl.style.left = `${Math.max(0, Math.min(100, x * 100))}%`;
-    boxEl.style.top = `${Math.max(0, Math.min(100, y * 100))}%`;
-    boxEl.style.width = `${Math.max(2, Math.min(100, w * 100))}%`;
-    boxEl.style.height = `${Math.max(2, Math.min(100, h * 100))}%`;
-    boxEl.style.borderColor = isLocked ? '#00ff88' : '#facc15';
+    if (gunDetected) {
+      const { x, y, w, h } = detection.box;
+      const confPct = Math.round((Number(detection.confidence) || 0) * 100);
+      boxEl.classList.remove('hidden');
+      boxEl.classList.toggle('on-target', true);
+      boxEl.style.left = `${Math.max(0, Math.min(100, x * 100))}%`;
+      boxEl.style.top = `${Math.max(0, Math.min(100, y * 100))}%`;
+      boxEl.style.width = `${Math.max(2, Math.min(100, w * 100))}%`;
+      boxEl.style.height = `${Math.max(2, Math.min(100, h * 100))}%`;
+      boxEl.style.borderColor = '#00ff88';
+      if (labelEl) labelEl.textContent = `GUN (${confPct}%)`;
+    } else {
+      boxEl.classList.add('hidden');
+    }
   }
 
-  if (labelEl) {
-    const selectedOpt = $('targetSelect')?.selectedOptions?.[0];
-    const targetName = selectedOpt && $('targetSelect')?.value
-      ? selectedOpt.textContent.split('[')[0].trim()
-      : 'ENEMY WEAPON';
-    labelEl.textContent = isLocked
-      ? `LOCKED: ${targetName} (${confPct}%)`
-      : `WEAPON DETECTED (${confPct}%)`;
+  // 2. Gambar kotak kedua khusus PLAT TIM & NOMOR
+  if (plateBox) {
+    if (targetPlate && targetPlate.box) {
+      const { x, y, w, h } = targetPlate.box;
+      const plateColor = isTeammate ? '#3b82f6' : isReadyToFire ? '#00ff88' : '#facc15';
+      plateBox.classList.remove('hidden');
+      plateBox.classList.toggle('on-target', isReadyToFire);
+      plateBox.style.left = `${Math.max(0, Math.min(100, x * 100))}%`;
+      plateBox.style.top = `${Math.max(0, Math.min(100, y * 100))}%`;
+      plateBox.style.width = `${Math.max(2, Math.min(100, w * 100))}%`;
+      plateBox.style.height = `${Math.max(2, Math.min(100, h * 100))}%`;
+      plateBox.style.borderColor = plateColor;
+      if (plateLabel) {
+        const roleTag = isTeammate ? 'TEMAN' : 'ENEMY';
+        plateLabel.textContent = `${roleTag}: ${targetPlate.team_code} #${targetPlate.nomor}`;
+      }
+    } else {
+      plateBox.classList.add('hidden');
+    }
   }
 
   if (statusEl) {
-    statusEl.classList.toggle('locked', isLocked);
-    if (isLocked) {
-      statusEl.textContent = `LOCKED ON TARGET · ${confPct}%`;
+    statusEl.classList.toggle('locked', isReadyToFire);
+    if (!gunDetected && !targetPlate) {
+      statusEl.textContent = cameraStream ? 'SCANNING WEAPON & PLATE...' : 'CAMERA OFF';
+      statusEl.style.color = '#94a3b8';
+    } else if (isTeammate) {
+      statusEl.textContent = `TEMAN (${targetPlate.team_code} #${targetPlate.nomor}) · DILARANG TEMBAK`;
+      statusEl.style.color = '#3b82f6';
+    } else if (isReadyToFire) {
+      statusEl.textContent = `ENEMY (${targetPlate.team_code} #${targetPlate.nomor}) · SIAP TEMBAK`;
       statusEl.style.color = '#00ff88';
-    } else {
-      statusEl.textContent = `WEAPON DETECTED · ARAHKAN CROSSHAIR (${confPct}%)`;
+    } else if (targetPlate) {
+      statusEl.textContent = `ENEMY (${targetPlate.team_code} #${targetPlate.nomor}) · ARAHKAN PISTOL KE KAMERA`;
       statusEl.style.color = '#facc15';
+    } else {
+      statusEl.textContent = 'PISTOL TERDETEKSI · ARAHKAN KE PLAT MUSUH';
+      statusEl.style.color = '#00ff88';
     }
   }
 }
@@ -391,13 +438,18 @@ function updateShootButtonReadiness() {
   if (shootCooldown) return;
 
   const hasTarget = Boolean($('targetSelect')?.value);
-  const isFresh = (Date.now() - latestGunDetection.updatedAt) < 1800;
+  const isFresh = (Date.now() - latestGunDetection.updatedAt) < 4000;
+  const targetPlate = latestGunDetection.plat?.target_plate || null;
+  const isTeammate = latestGunDetection.relation === 'teammate';
+  const hasWeapon = Boolean(latestGunDetection.detected);
+
   const canFire = Boolean(
     cameraStream &&
     hasTarget &&
     isFresh &&
-    latestGunDetection.detected &&
-    latestGunDetection.on_target
+    hasWeapon &&
+    targetPlate &&
+    !isTeammate
   );
 
   button.disabled = !canFire;
@@ -408,38 +460,62 @@ function updateShootButtonReadiness() {
   if (label && !label.textContent.startsWith('SHOT')) {
     if (!cameraStream) {
       label.textContent = 'NO CAM';
-    } else if (!hasTarget) {
-      label.textContent = 'NO TARGET';
-    } else if (!isFresh || !latestGunDetection.detected) {
+    } else if (!isFresh) {
       label.textContent = 'SCANNING';
-    } else if (!latestGunDetection.on_target) {
-      label.textContent = 'AIM TARGET';
+    } else if (isTeammate) {
+      label.textContent = 'TEAMMATE';
+    } else if (!hasWeapon) {
+      label.textContent = 'NO GUN';
+    } else if (!targetPlate || !hasTarget) {
+      label.textContent = 'NO PLATE';
     } else {
       label.textContent = 'FIRE';
     }
   }
 }
 
+let lastSolidGun = { box: null, confidence: 0, at: 0 };
+let lastSolidPlate = { target_plate: null, relation: 'unknown', at: 0 };
+
 async function runSingleGunDetectionTick() {
   if (!gameplayOpened || !player || !match || playerEliminated || match.status === 'completed') return;
   if (gunDetectInFlight || !cameraStream) return;
 
-  const frameBase64 = captureGameplayFrameBase64(0.65, 512);
+  const frameBase64 = captureGameplayFrameBase64(0.78, 640);
   if (!frameBase64) return;
 
   gunDetectInFlight = true;
   try {
     const res = await api(`/api/matches/${match.id}/detect-gun`, {
       method: 'POST',
-      body: JSON.stringify({ image: frameBase64 })
+      body: JSON.stringify({
+        image: frameBase64,
+        player_id: player.id
+      })
     });
 
+    const now = Date.now();
+    if (res.detected && res.box) {
+      lastSolidGun = { box: res.box, confidence: Number(res.confidence || 0), at: now };
+    }
+    const rawPlate = res.plat?.target_plate || null;
+    if (rawPlate) {
+      lastSolidPlate = { target_plate: rawPlate, relation: res.relation || 'unknown', at: now };
+    }
+
+    // Pertahankan kotak selama 1.2 detik jika 1-2 frame sempat berkedip
+    const keepGun = res.detected || (now - lastSolidGun.at < 3500 && lastSolidGun.box);
+    const keepPlate = rawPlate || (now - lastSolidPlate.at < 3500 ? lastSolidPlate.target_plate : null);
+
     latestGunDetection = {
-      detected: Boolean(res.detected),
-      on_target: Boolean(res.on_target),
-      confidence: Number(res.confidence || 0),
-      box: res.box || null,
-      updatedAt: Date.now()
+      detected: Boolean(keepGun),
+      on_target: Boolean(keepGun),
+      confidence: res.detected ? Number(res.confidence || 0) : lastSolidGun.confidence,
+      box: res.detected ? res.box : (keepGun ? lastSolidGun.box : null),
+      plat: { ...(res.plat || {}), target_plate: keepPlate },
+      relation: rawPlate ? (res.relation || 'unknown') : (keepPlate ? lastSolidPlate.relation : 'unknown'),
+      can_shoot: Boolean(keepGun && keepPlate && (rawPlate ? res.relation : lastSolidPlate.relation) !== 'teammate'),
+      updatedAt: now
     };
 
     renderGunDetectionOverlay(latestGunDetection);
@@ -449,6 +525,9 @@ async function runSingleGunDetectionTick() {
       on_target: false,
       confidence: 0,
       box: null,
+      plat: null,
+      relation: 'unknown',
+      can_shoot: false,
       updatedAt: 0
     };
     renderGunDetectionOverlay(null);
@@ -463,9 +542,18 @@ async function runSingleGunDetectionTick() {
 
 function startGunDetectionLoop() {
   stopGunDetectionLoop();
-  latestGunDetection = { detected: false, on_target: false, confidence: 0, box: null, updatedAt: 0 };
+  latestGunDetection = {
+    detected: false,
+    on_target: false,
+    confidence: 0,
+    box: null,
+    plat: null,
+    relation: 'unknown',
+    can_shoot: false,
+    updatedAt: 0
+  };
   updateShootButtonReadiness();
-  gunDetectHandle = setInterval(runSingleGunDetectionTick, 350);
+  gunDetectHandle = setInterval(runSingleGunDetectionTick, 150);
 }
 
 function stopGunDetectionLoop() {
@@ -474,7 +562,16 @@ function stopGunDetectionLoop() {
     gunDetectHandle = null;
   }
   gunDetectInFlight = false;
-  latestGunDetection = { detected: false, on_target: false, confidence: 0, box: null, updatedAt: 0 };
+  latestGunDetection = {
+    detected: false,
+    on_target: false,
+    confidence: 0,
+    box: null,
+    plat: null,
+    relation: 'unknown',
+    can_shoot: false,
+    updatedAt: 0
+  };
   renderGunDetectionOverlay(null);
   updateShootButtonReadiness();
 }
@@ -931,7 +1028,7 @@ async function refreshLobby() {
       table.append(tbody);
       wrapper.append(table);
       section.append(head, wrapper);
-      root.append(section);
+      root.appendChild(section);
 
       if (players.some(item => item.player?.id === player.id)) ownTeam = team;
     });
@@ -1496,7 +1593,7 @@ function handleHealingPoseSignal(event) {
 window.addEventListener('ops-healing-pose-valid', handleHealingPoseSignal);
 
 // ==========================================
-// GAMEPLAY SHOOT ACTION (VALIDATED WITH YOLOv4-TINY + TARGET PICKER)
+// GAMEPLAY SHOOT ACTION (VALIDATED WITH WEAPON + PLATE + TEAM CHECK)
 // ==========================================
 
 async function sendShootEvent() {
@@ -1515,10 +1612,19 @@ async function sendShootEvent() {
     return;
   }
 
-  const freshFrame = captureGameplayFrameBase64(0.8, 640);
-  if (!freshFrame || !latestGunDetection.detected || !latestGunDetection.on_target) {
+  const freshFrame = captureGameplayFrameBase64(0.8, 416);
+  if (!freshFrame || !latestGunDetection.detected) {
     if ($('gunStatus')) {
-      $('gunStatus').textContent = 'ARAHKAN CROSSHAIR KE SENJATA MUSUH';
+      $('gunStatus').textContent = 'SENJATA TIDAK TERDETEKSI';
+      $('gunStatus').style.color = '#ff858a';
+    }
+    updateShootButtonReadiness();
+    return;
+  }
+
+  if (latestGunDetection.relation === 'teammate') {
+    if ($('gunStatus')) {
+      $('gunStatus').textContent = 'DILARANG MENEMBAK REKAN SATU TIM';
       $('gunStatus').style.color = '#ff858a';
     }
     updateShootButtonReadiness();
