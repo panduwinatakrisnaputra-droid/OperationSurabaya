@@ -1,4 +1,5 @@
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = window.OPS_API_BASE || (window.location.protocol === 'file:' ? 'http://127.0.0.1:8000' : window.location.origin);
+window.OPS_API_BASE = API_BASE;
 const WS_BASE = API_BASE.replace(/^http/, 'ws');
 
 const start = document.getElementById('startBtn');
