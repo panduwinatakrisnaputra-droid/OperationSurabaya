@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OPERATION: SURABAYA — Player Portal</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
   <div class="ambient"></div>
@@ -296,20 +296,17 @@
         <div><strong id="baseDefenseNotificationTitle">BASE UNDER ATTACK</strong><p id="baseDefenseNotificationMessage">Tim lawan sedang mencoba menonaktifkan base kalian.</p></div>
         <button type="button" id="closeBaseDefenseNotification" aria-label="Tutup notifikasi">×</button>
       </div>
-      <div class="gameplay-topbar">
+      <div class="gameplay-topbar" aria-hidden="true">
         <div>
           <p class="eyebrow">LIVE OPERATION</p>
           <strong id="gameplayMatchName">OPERATION: SURABAYA</strong>
-          <small id="gameplayPlayerInfo">PLAYER · TEAM</small>
         </div>
         <div class="gameplay-topbar-right">
-          <div class="match-timer-card realtime-clock-card" aria-label="Waktu lokal saat ini">
+          <div class="match-timer-card realtime-clock-card">
             <small>LOCAL TIME</small>
             <strong id="gameplayTimer">--:--:--</strong>
             <span id="gameplayTimerStatus">REAL-TIME CLOCK</span>
           </div>
-          <span id="gpsStatus" class="camera-status">GPS STANDBY</span>
-          <span id="cameraStatus" class="camera-status">CAMERA STANDBY</span>
         </div>
       </div>
 
@@ -317,45 +314,50 @@
         <video id="gameplayCamera" autoplay playsinline muted></video>
         <div id="crosshair" class="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i><b></b></div>
         <div id="gunBox" class="gun-box hidden"><span id="gunBoxLabel">ENEMY</span></div>
-        <div class="target-picker"><span id="gunStatus" class="gun-status">SCANNING...</span><select id="targetSelect" aria-label="Pilih target musuh"><option value="">TARGET: -</option></select></div>
+        <div class="target-picker" hidden><span id="gunStatus" class="gun-status">SCANNING...</span><select id="targetSelect" aria-label="Pilih target musuh"><option value="">TARGET: -</option></select></div>
         <div id="cameraPlaceholder" class="camera-placeholder">
           <div class="camera-symbol">◉</div>
           <strong>KAMERA BELUM AKTIF</strong>
           <p id="cameraMessage">Izinkan akses kamera untuk masuk ke area permainan.</p>
           <button type="button" id="enableCameraBtn" class="camera-action">AKTIFKAN KAMERA</button>
         </div>
-        <div class="camera-overlay">
-          <span class="camera-live"><i></i> LIVE CAMERA</span>
-          <span style="display:inline-flex;align-items:center"><span id="gameplayTeamBadge" class="team-badge">TEAM</span><button type="button" id="fullscreenBtn" class="fullscreen-btn" aria-label="Layar penuh">&#x26F6;</button></span>
-        </div>
-        <!-- PLAYER HEALTH + ACTION PANEL -->
-        <div class="gameplay-left-panel">
-          <div class="gameplay-health">
-            <div class="health-info"><span>PLAYER HEALTH</span><strong id="gameplayHealthText">100 / 100 HP</strong></div>
-            <div class="health-bar"><div id="gameplayHealthFill" class="health-fill"></div></div>
-            <span id="gameplayHealthStatus" class="health-status">ALIVE</span>
-            <div id="ghostModeIndicator" class="ghost-mode-indicator hidden" aria-live="polite"><span class="ghost-mode-dot"></span> GHOST MODE <strong id="ghostModeCountdown">00:30</strong></div>
+        <!-- HUD KANAN ATAS: status GPS/CAM + tim + menu -->
+        <div class="hud-topright">
+          <div class="hud-status-pill" id="hudStatusPill">
+            <span id="gpsStatus" class="camera-status hud-dot" data-label="GPS" data-state="warn">GPS STANDBY</span>
+            <span id="cameraStatus" class="camera-status hud-dot" data-label="CAM" data-state="warn">CAMERA STANDBY</span>
+            <span id="gameplayTeamBadge" class="team-badge">TEAM</span>
           </div>
           <div class="gameplay-action-dropdown" id="gameplayActionDropdown">
-            <button type="button" id="gameActionsToggle" class="game-actions-toggle" aria-expanded="false" aria-controls="gameplayActionMenu">
-              <span class="game-actions-toggle-label"><span class="game-actions-icon">⌘</span> GAME ACTIONS</span>
-              <span class="game-actions-chevron" aria-hidden="true">▾</span>
+            <button type="button" id="gameActionsToggle" class="game-actions-toggle hud-menu-btn" aria-label="Menu permainan" aria-expanded="false" aria-controls="gameplayActionMenu">
+              <span class="game-actions-icon" aria-hidden="true">☰</span>
             </button>
             <div class="gameplay-action-menu hidden" id="gameplayActionMenu">
               <div class="gameplay-action-stack">
+                <small id="gameplayPlayerInfo" class="menu-player">PLAYER · TEAM</small>
                 <button type="button" id="scanWeaponQrBtn" class="weapon-scan-button"><span>01</span> SCAN QR UPGRADE</button>
                 <button type="button" id="scanGhostQrBtn" class="ghost-scan-button"><span>02</span> GHOST MODE</button>
                 <button type="button" id="openHealingBtn" class="healing-open-button"><span>03</span> BASE HEALING</button>
                 <button type="button" id="scanBaseShutdownBtn" class="base-shutdown-button"><span>04</span> SHUTDOWN BASE</button>
+                <button type="button" id="fullscreenBtn" class="menu-util-button"><span>05</span> LAYAR PENUH</button>
+                <button type="button" id="gameplayLogoutBtn" class="menu-logout-button"><span>06</span> LOG OUT</button>
                 <span id="weaponScanStatus" class="weapon-scan-status" aria-live="polite"></span>
               </div>
             </div>
           </div>
         </div>
-        <!-- PLAYER WEAPON HUD -->
-        <div class="weapon-hud" id="weaponHud">
-          <div class="weapon-hud-main"><span class="weapon-kicker">EQUIPPED WEAPON</span><strong id="weaponName">TACTICAL RIFLE MK-1</strong><span id="weaponLevel">WEAPON LEVEL 1</span></div>
-          <div class="weapon-damage"><strong id="weaponDamage">10</strong><span>DAMAGE / SHOT</span></div>
+        <!-- HUD KIRI ATAS: HP + senjata (ringkas) -->
+        <div class="gameplay-left-panel">
+          <div class="gameplay-health">
+            <div class="health-info"><span>HP</span><strong id="gameplayHealthText">100 / 100</strong></div>
+            <div class="health-bar"><div id="gameplayHealthFill" class="health-fill"></div></div>
+            <span id="gameplayHealthStatus" class="health-status">ALIVE</span>
+            <div id="ghostModeIndicator" class="ghost-mode-indicator hidden" aria-live="polite"><span class="ghost-mode-dot"></span> GHOST MODE <strong id="ghostModeCountdown">00:30</strong></div>
+          </div>
+          <div class="weapon-hud" id="weaponHud">
+            <div class="weapon-hud-main"><span class="weapon-kicker">EQUIPPED WEAPON</span><strong id="weaponName">TACTICAL RIFLE MK-1</strong><span id="weaponLevel">WEAPON LEVEL 1</span></div>
+            <div class="weapon-damage"><strong id="weaponDamage">10</strong><span>DAMAGE / SHOT</span></div>
+          </div>
         </div>
       </div>
 
@@ -376,9 +378,8 @@
           <span class="shoot-label">FIRE</span>
         </button>
       </div>
-      <div class="gameplay-footer">
+      <div class="gameplay-footer" aria-hidden="true">
         <span>OPERATION STATUS <b id="gameplayStatus">ACTIVE</b></span>
-        <button type="button" id="gameplayLogoutBtn" class="camera-logout">LOG OUT</button>
       </div>
     </section>
 
@@ -503,7 +504,7 @@
 
   <script src="vendor/face-api.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'"></script>
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=12"></script>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
   <script src="comms-player.js?v=10"></script>

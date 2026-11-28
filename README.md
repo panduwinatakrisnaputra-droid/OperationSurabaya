@@ -156,9 +156,11 @@ bash run.sh
 .venv\Scripts\uvicorn.exe main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-- **API Base:** [http://127.0.0.1:8000](http://127.0.0.1:8000)
-- **Interactive Swagger Docs:** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-- **Health Check Endpoint:** [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
+- **API Base:** [https://operationsurabaya.pipip.my.id](https://operationsurabaya.pipip.my.id)
+- **Player App:** [https://operationsurabaya.pipip.my.id/player-app/](https://operationsurabaya.pipip.my.id/player-app/)
+- **Admin Dashboard:** [https://operationsurabaya.pipip.my.id/admin-dashboard/](https://operationsurabaya.pipip.my.id/admin-dashboard/)
+- **Interactive Swagger Docs:** [https://operationsurabaya.pipip.my.id/docs](https://operationsurabaya.pipip.my.id/docs)
+- **Health Check Endpoint:** [https://operationsurabaya.pipip.my.id/health](https://operationsurabaya.pipip.my.id/health)
 
 ---
 

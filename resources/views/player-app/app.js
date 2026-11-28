@@ -243,15 +243,23 @@ async function startGameplayCamera() {
     if (message) message.textContent = 'Meminta izin akses kamera...';
 
     stopGameplayCamera();
+    stopAuthCamera(); // kamera login wajah harus dilepas dulu, HP biasanya hanya bisa buka 1 kamera
 
-    cameraStream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        facingMode: { ideal: 'environment' },
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
-      }
-    });
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      });
+    } catch (firstError) {
+      if (firstError.name === 'NotAllowedError' || firstError.name === 'PermissionDeniedError' || firstError.name === 'NotFoundError') throw firstError;
+      // Beri jeda singkat agar kamera sebelumnya benar-benar lepas, lalu coba lagi dengan constraint paling longgar
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      cameraStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+    }
 
     if (video) {
       video.srcObject = cameraStream;
@@ -272,8 +280,10 @@ async function startGameplayCamera() {
       if (message) message.textContent = 'Izin kamera ditolak. Izinkan akses kamera melalui pengaturan browser.';
     } else if (error.name === 'NotFoundError') {
       if (message) message.textContent = 'Kamera tidak ditemukan pada perangkat ini.';
+    } else if (error.name === 'NotReadableError' || error.name === 'AbortError') {
+      if (message) message.textContent = 'Kamera sedang dipakai aplikasi/tab lain. Tutup tab lain yang memakai kamera, lalu tekan Aktifkan Kamera.';
     } else {
-      if (message) message.textContent = 'Kamera gagal diaktifkan. Pastikan halaman menggunakan HTTPS atau localhost.';
+      if (message) message.textContent = 'Kamera gagal diaktifkan (' + (error.name || 'Error') + '). Pastikan halaman menggunakan HTTPS atau localhost.';
     }
     updateShootButtonReadiness();
   }
@@ -1282,7 +1292,7 @@ async function refreshGameplayHealth() {
     const text = $('gameplayHealthText');
     const status = $('gameplayHealthStatus');
 
-    if (text) text.textContent = `${hp} / ${maxHp} HP`;
+    if (text) text.textContent = `${hp} / ${maxHp}`;
     if (fill) {
       fill.style.width = `${percentage}%`;
       fill.classList.toggle('low', percentage <= 25);
@@ -1971,6 +1981,7 @@ function setGameActionsDropdown(open) {
   gameActionsDropdown.classList.toggle('is-open', open);
   gameActionsMenu.classList.toggle('hidden', !open);
   gameActionsToggle.setAttribute('aria-expanded', String(open));
+  $('gameplayPanel')?.classList.toggle('menu-open', open);
 }
 gameActionsToggle?.addEventListener('click', (event) => {
   event.stopPropagation();
@@ -1984,6 +1995,24 @@ document.addEventListener('click', (event) => {
 });
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') setGameActionsDropdown(false);
+});
+
+// Indikator status GPS / kamera berupa titik berwarna (teks lengkap tersimpan di atribut title)
+function classifyHudStatus(text) {
+  const value = String(text || '').toUpperCase();
+  if (/ERROR|BLOCKED|DENIED|UNSUPPORTED|UNAVAILABLE|FAILED|OFF/.test(value)) return 'err';
+  if (/CONFIRMED|CONNECTED|ACTIVE/.test(value)) return 'ok';
+  return 'warn';
+}
+['gpsStatus', 'cameraStatus'].forEach((id) => {
+  const el = $(id);
+  if (!el) return;
+  const sync = () => {
+    el.dataset.state = classifyHudStatus(el.textContent);
+    el.title = el.textContent;
+  };
+  new MutationObserver(sync).observe(el, { childList: true, characterData: true, subtree: true });
+  sync();
 });
 
 $('scanWeaponQrBtn').addEventListener('click', startWeaponQrScanner);
@@ -2011,6 +2040,7 @@ $('cancelGhostQrBtn').addEventListener('click', () => stopGhostQrScanner(true));
 $('ghostQrFile').addEventListener('change', (event) => scanGhostQrImage(event.target.files?.[0]));
 
 $('gameplayLogoutBtn').addEventListener('click', async () => {
+  if (!window.confirm('Keluar dari permainan?')) return;
   await stopGhostQrScanner(false);
   if (ghostModeTickHandle) clearInterval(ghostModeTickHandle);
   ghostModeTickHandle = null;
@@ -2142,6 +2172,16 @@ function resetPortal(message) {
 
 let authStream = null;
 let isWebcamReady = false;
+
+function stopAuthCamera() {
+  if (authStream) {
+    authStream.getTracks().forEach((track) => track.stop());
+    authStream = null;
+  }
+  isWebcamReady = false;
+  const webcam = $('authWebcam');
+  if (webcam) webcam.srcObject = null;
+}
 let faceTrackerHandle = null;
 let isFaceApiLoaded = false;
 
