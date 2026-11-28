@@ -1332,6 +1332,120 @@ def clear_match_events(match_id: str):
 
 
 
+def _fetch_all_match_events(match_id: str, page_size: int = 1000, max_pages: int = 50):
+    """Ambil seluruh game_events sebuah match dengan paginasi.
+
+    Supabase membatasi 1000 baris per query, sedangkan event gerakan pemain
+    dicatat terus-menerus, sehingga tanpa paginasi statistik bisa terpotong.
+    """
+    events = []
+    for page in range(max_pages):
+        start = page * page_size
+        response = (
+            supabase.table("game_events")
+            .select("*")
+            .eq("match_id", match_id)
+            .order("created_at")
+            .range(start, start + page_size - 1)
+            .execute()
+        )
+        rows = response.data or []
+        events.extend(rows)
+        if len(rows) < page_size:
+            break
+    return events
+
+
+def _parse_iso_datetime(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def get_match_result(match_id: str):
+    """Ringkasan hasil pertandingan untuk layar 'match selesai' di player app."""
+    try:
+        match_res = (
+            supabase.table("matches")
+            .select("id, status, started_at, ended_at, winner_team_code")
+            .eq("id", match_id)
+            .limit(1)
+            .execute()
+        )
+        if not match_res.data:
+            raise HTTPException(status_code=404, detail="Pertandingan tidak ditemukan")
+
+        match_data = match_res.data[0]
+        if match_data.get("status") != "completed":
+            raise HTTPException(status_code=409, detail="Pertandingan belum selesai")
+
+        winner = match_data.get("winner_team_code")
+
+        # Alasan pertandingan berakhir
+        reason = "admin"
+        reason_text = "Pertandingan diakhiri oleh admin"
+        end_events = (
+            supabase.table("game_events")
+            .select("event_type, event_data")
+            .eq("match_id", match_id)
+            .in_("event_type", ["base_shutdown_success", "match_completed"])
+            .execute()
+        ).data or []
+        base_event = next((e for e in end_events if e.get("event_type") == "base_shutdown_success"), None)
+        elimination_event = next((e for e in end_events if e.get("event_type") == "match_completed"), None)
+        if base_event:
+            reason = "base_shutdown"
+            defender = (base_event.get("event_data") or {}).get("defender_team_code")
+            reason_text = f"Base {defender} dinonaktifkan" if defender else "Base lawan dinonaktifkan"
+        elif elimination_event:
+            reason = "team_elimination"
+            reason_text = "Seluruh tim lawan tereliminasi"
+
+        # Durasi pertandingan
+        started = _parse_iso_datetime(match_data.get("started_at"))
+        ended = _parse_iso_datetime(match_data.get("ended_at"))
+        duration_seconds = None
+        if started and ended:
+            duration_seconds = max(0, int((ended - started).total_seconds()))
+
+        # Statistik pemain (urut: hit terbanyak, lalu akurasi, lalu tembakan paling sedikit)
+        analytics = get_match_analytics(match_id)
+        players = sorted(
+            analytics.get("players", []),
+            key=lambda p: (
+                -(p.get("total_hit_given") or 0),
+                -(p.get("accuracy_percent") or 0),
+                p.get("total_shots") or 0,
+            ),
+        )
+        for index, entry in enumerate(players, start=1):
+            entry["rank"] = index
+            entry["distance_meters"] = round(entry.get("distance_meters") or 0, 1)
+            entry["is_mvp"] = index == 1 and (entry.get("total_hit_given") or 0) > 0
+
+        return {
+            "success": True,
+            "match_id": match_id,
+            "status": "completed",
+            "winner_team_code": winner,
+            "reason": reason,
+            "reason_text": reason_text,
+            "started_at": match_data.get("started_at"),
+            "ended_at": match_data.get("ended_at"),
+            "duration_seconds": duration_seconds,
+            "players": players,
+            "teams": analytics.get("teams", []),
+        }
+    except HTTPException:
+        raise
+    except Exception as error:
+        print("GET MATCH RESULT ERROR:", repr(error))
+        raise HTTPException(status_code=500, detail="Gagal mengambil hasil pertandingan")
+
+
 def get_match_analytics(match_id: str):
     """Mengambil statistik setiap pemain untuk Match History Dashboard."""
     try:
@@ -1388,14 +1502,7 @@ def get_match_analytics(match_id: str):
         }
 
         # 4. Ambil seluruh event pertandingan
-        events_response = (
-            supabase.table("game_events")
-            .select("*")
-            .eq("match_id", match_id)
-            .execute()
-        )
-
-        events = events_response.data or []
+        events = _fetch_all_match_events(match_id)
 
         # 5. Siapkan statistik setiap pemain
         analytics = {}
@@ -1455,9 +1562,12 @@ def get_match_analytics(match_id: str):
 
                 distance = event_data.get("distance_meters", 0)
 
+                # distance_meters pada event player_movement bersifat kumulatif,
+                # jadi yang dipakai adalah nilai terbesar (bukan hasil penjumlahan).
                 try:
-                    analytics[actor_key]["distance_meters"] += float(
-                        distance or 0
+                    analytics[actor_key]["distance_meters"] = max(
+                        analytics[actor_key]["distance_meters"],
+                        float(distance or 0)
                     )
                 except (TypeError, ValueError):
                     pass

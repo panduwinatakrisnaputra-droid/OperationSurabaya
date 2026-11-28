@@ -1193,6 +1193,109 @@
   .weapon-qr-modal [id$="Reader"] { width: min(100%, 46vh); }
 }
 
+/* ===== MATCH RESULT SCREEN ===== */
+.match-result-overlay {
+  position: absolute; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  padding: 12px;
+  background: rgba(3, 6, 10, .985);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.match-result-card {
+  --result-color: #8493a2;
+  width: min(1000px, 100%);
+  margin: auto;
+  padding: 14px;
+  display: flex; flex-direction: column; gap: 10px;
+  background: #0d1210;
+  border: 1px solid #1f2a23;
+  font-family: 'DM Mono', monospace;
+  color: var(--text);
+}
+.match-result-banner {
+  display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  padding: 14px 18px;
+  background: #1d1517;
+  background: color-mix(in srgb, var(--result-color) 14%, #0c1010);
+  border-left: 3px solid var(--result-color);
+}
+.match-result-banner h2 {
+  margin: 0;
+  font: 500 clamp(26px, 5vw, 34px)/1.1 'DM Mono', monospace;
+  letter-spacing: 2px;
+  color: var(--result-color);
+  color: color-mix(in srgb, var(--result-color) 72%, #fff);
+}
+.match-result-banner p { margin: 6px 0 0; font-size: 12px; letter-spacing: .5px; color: var(--muted); }
+.match-result-duration { text-align: right; flex-shrink: 0; }
+.match-result-duration strong { display: block; font: 500 clamp(22px, 4vw, 28px)/1.1 'DM Mono', monospace; letter-spacing: 1px; color: #fff; }
+.match-result-duration span { display: block; margin-top: 4px; font-size: 11px; letter-spacing: 1.5px; color: var(--muted); }
+
+.match-result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.match-result-box { padding: 12px 14px 14px; border: 1px solid #263a22; background: #0a0f0d; min-width: 0; }
+.match-result-box h3 { margin: 0 0 14px; font: 500 12px 'DM Mono', monospace; letter-spacing: 1.5px; color: #9aa89d; }
+
+.match-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 12px; }
+.match-stat-grid strong { display: block; font: 500 clamp(22px, 3.6vw, 28px)/1.1 'DM Mono', monospace; color: #fff; }
+.match-stat-grid span { display: block; margin-top: 4px; font-size: 12px; letter-spacing: 1px; color: #8d9a90; }
+
+.match-scoreboard { list-style: none; margin: 0; padding: 0; }
+.match-scoreboard li {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 0; border-bottom: 1px solid #1c2620;
+  font-size: 15px;
+}
+.match-scoreboard li:last-child { border-bottom: 0; }
+.match-scoreboard .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: #64748b; }
+.match-scoreboard .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.match-scoreboard .score { font-size: 15px; color: #fff; }
+.match-scoreboard li.me .name { color: var(--lime); }
+.match-scoreboard .mvp {
+  padding: 1px 7px; border: 1px solid var(--lime); color: var(--lime);
+  font-size: 12px; letter-spacing: .5px; background: rgba(199, 243, 107, .08);
+}
+.match-scoreboard-empty { color: var(--muted); font-size: 12px; padding: 8px 0; }
+.match-scoreboard-note { margin: 10px 0 0; text-align: right; font-size: 12px; color: #8d9a90; }
+
+.match-result-detail { border: 1px solid #263a22; background: #0a0f0d; }
+.match-detail-scroll { overflow-x: auto; }
+.match-result-detail table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 520px; }
+.match-result-detail th, .match-result-detail td { padding: 8px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid #1c2620; }
+.match-result-detail th:first-child, .match-result-detail td:first-child,
+.match-result-detail th:nth-child(2), .match-result-detail td:nth-child(2) { text-align: left; }
+.match-result-detail th { font-weight: 500; letter-spacing: 1px; color: #8d9a90; font-size: 11px; }
+.match-result-detail tr.me td { color: var(--lime); }
+.match-result-detail tr:last-child td { border-bottom: 0; }
+
+.match-result-error { margin: 0; padding: 8px 10px; font-size: 12px; color: #fca5a5; border: 1px solid #5b2a2a; background: #1a0f10; }
+
+.match-result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.match-result-btn {
+  padding: 14px 12px; cursor: pointer; text-align: center;
+  font: 500 13px 'DM Mono', monospace; letter-spacing: 1px;
+}
+.match-result-btn.outline { background: transparent; border: 1px solid #3c5a2c; color: var(--lime); }
+.match-result-btn.outline:hover { background: rgba(199, 243, 107, .08); }
+.match-result-btn.primary { background: #c3f45f; background: var(--lime); border: 1px solid var(--lime); color: #10170a; }
+.match-result-btn.primary:hover { background: #d8ff8a; }
+.match-result-btn:disabled { opacity: .55; cursor: wait; }
+
+@media (max-width: 640px) and (orientation: portrait) {
+  .match-result-grid, .match-result-actions { grid-template-columns: 1fr; }
+  .match-result-banner { flex-direction: column; align-items: flex-start; }
+  .match-result-duration { text-align: left; }
+}
+@media (max-height: 460px) {
+  .match-result-overlay { padding: 6px; align-items: flex-start; }
+  .match-result-card { padding: 10px; gap: 8px; }
+  .match-result-banner { padding: 10px 14px; }
+  .match-result-box { padding: 10px 12px; }
+  .match-result-box h3 { margin-bottom: 8px; }
+  .match-stat-grid { gap: 8px 12px; }
+  .match-scoreboard li { padding: 4px 0; }
+}
+
 /* ==========================================================
    HUD GAMEPLAY RINGKAS (v12)
    - HP + senjata kecil di kiri atas

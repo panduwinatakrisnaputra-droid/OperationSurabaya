@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -6,9 +7,11 @@
   <title>OPERATION: SURABAYA — Player Portal</title>
   <link rel="stylesheet" href="style.css?v=12">
 </head>
+
 <body>
   <div class="ambient"></div>
 
+  <!-- TOPBAR -->
   <header class="topbar">
     <a class="brand" href="#">
       <span class="brand-mark">F</span>
@@ -25,6 +28,8 @@
   </header>
 
   <main class="shell">
+
+    <!-- HERO -->
     <section class="hero">
       <div>
         <p class="eyebrow">PLAYER PORTAL / 01</p>
@@ -41,8 +46,12 @@
       </div>
     </section>
 
+    <!-- ================================== -->
     <!-- AUTHENTICATION -->
+    <!-- ================================== -->
+
     <section id="loginPanel" class="panel login-panel">
+
       <div class="section-head">
         <div>
           <p class="eyebrow">IDENTITY CHECK</p>
@@ -54,40 +63,59 @@
         <button type="button" class="auth-tab active" id="showLogin">
           LOGIN
         </button>
+
         <button type="button" class="auth-tab" id="showRegister">
           REGISTER
         </button>
       </div>
 
       <div class="login-grid">
+
+        <!-- FACE CAMERA -->
         <div class="scan-box face-scan-box" id="faceScanBox">
+
           <div class="scan-corners"></div>
+
           <video id="authWebcam" autoplay playsinline muted></video>
+
           <canvas id="snapshotCanvas" style="display:none;"></canvas>
           <canvas id="authOverlay"></canvas>
+
           <div class="scan-line" id="faceScanLine"></div>
 
-          <!-- Prompt Izin Kamera jika browser memblokir autoplay -->
           <div class="camera-perm-prompt" id="cameraPermPrompt">
             <div class="camera-perm-icon">📷</div>
+
             <p>Izin kamera diperlukan untuk Face Recognition.</p>
+
             <button type="button" class="btn primary" id="requestCameraBtn">
               IZINKAN &amp; AKTIFKAN KAMERA
             </button>
           </div>
 
           <div class="face-feedback-wrap">
-            <span class="face-status-badge" id="faceBadge">MENUNGGU IZIN KAMERA</span>
-            <span class="face-instruction" id="faceInstruction">Klik tombol di atas untuk mengaktifkan kamera</span>
+            <span class="face-status-badge" id="faceBadge">
+              MENUNGGU IZIN KAMERA
+            </span>
+
+            <span class="face-instruction" id="faceInstruction">
+              Klik tombol di atas untuk mengaktifkan kamera
+            </span>
           </div>
+
         </div>
 
+        <!-- AUTH FORM -->
         <div class="form-area">
 
-          <!-- LOGIN FORM (FACE RECOGNITION) -->
+          <!-- LOGIN -->
           <div id="loginFields">
+
             <div class="face-login-intro">
-              <p>Sistem memindai wajah Anda secara real-time. Tidak perlu mengetik email atau password.</p>
+              <p>
+                Sistem memindai wajah Anda secara real-time.
+                Tidak perlu mengetik email atau password.
+              </p>
             </div>
 
             <button class="btn primary" id="faceLoginBtn">
@@ -97,11 +125,14 @@
             <p class="hint" id="loginHint">
               Arahkan wajah lurus ke kamera sampai kotak wajah berwarna hijau.
             </p>
+
           </div>
 
-          <!-- REGISTER FORM -->
+          <!-- REGISTER -->
           <div id="registerFields" class="hidden">
+
             <label for="playerNumber">PLAYER ID (ANGKA)</label>
+
             <input
               id="playerNumber"
               type="number"
@@ -113,9 +144,13 @@
               autocomplete="off"
               required
             >
-            <p class="hint">Gunakan nomor 1–999. Setiap pemain harus memiliki Player ID yang berbeda.</p>
+
+            <p class="hint">
+              Gunakan nomor 1–999. Setiap pemain harus memiliki Player ID yang berbeda.
+            </p>
 
             <label for="playerName">USERNAME</label>
+
             <input
               id="playerName"
               placeholder="Contoh: player001"
@@ -123,6 +158,7 @@
             >
 
             <label for="fullName">NAMA LENGKAP</label>
+
             <input
               id="fullName"
               placeholder="Masukkan nama lengkap"
@@ -130,6 +166,7 @@
             >
 
             <label for="playerEmail">EMAIL (OPSIONAL)</label>
+
             <input
               id="playerEmail"
               type="email"
@@ -139,8 +176,11 @@
 
             <div class="biometric-box">
               <label>STATUS PEMINDAIAN WAJAH</label>
+
               <div class="biometric-indicator" id="bioIndicator">
-                <span id="faceSampleStatus">Menunggu deteksi wajah di kamera...</span>
+                <span id="faceSampleStatus">
+                  Menunggu deteksi wajah di kamera...
+                </span>
               </div>
             </div>
 
@@ -151,14 +191,19 @@
             <p class="hint" id="registerHint">
               Pastikan wajah Anda terlihat jelas di kamera sebelum menekan daftar.
             </p>
+
           </div>
 
         </div>
       </div>
     </section>
 
+    <!-- ================================== -->
     <!-- ROOM BROWSER -->
+    <!-- ================================== -->
+
     <section id="roomPanel" class="panel hidden">
+
       <div class="section-head">
         <div>
           <p class="eyebrow">OPERATION ROOM / 02</p>
@@ -168,46 +213,116 @@
       </div>
 
       <div class="room-actions-grid">
+
+        <!-- CREATE ROOM -->
         <div class="room-action-card">
+
           <p class="eyebrow">HOST AN OPERATION</p>
           <h3>Create Room</h3>
+
           <label for="createRoomName">NAMA ROOM</label>
-          <input id="createRoomName" maxlength="100" placeholder="Contoh: MATCH 002">
+
+          <input
+            id="createRoomName"
+            maxlength="100"
+            placeholder="Contoh: MATCH 002"
+          >
+
           <div id="createTeamEditor" class="dynamic-team-editor"></div>
-          <button type="button" class="btn outline" id="addTeamBtn">+ ADD TEAM</button>
+
+          <button type="button" class="btn outline" id="addTeamBtn">
+            + ADD TEAM
+          </button>
+
           <label for="roomArena">ARENA</label>
-          <input id="roomArena" maxlength="100" value="UNESA">
+
+          <input
+            id="roomArena"
+            maxlength="100"
+            value="UNESA"
+          >
+
           <label for="hostTeam">TIM HOST</label>
-          <select id="hostTeam"><option value="RED">RED TEAM</option><option value="BLUE">BLUE TEAM</option></select>
-          <button class="btn primary" id="createRoomBtn">CREATE ROOM <b>↗</b></button>
-          <p class="hint" id="createRoomHint">Host otomatis masuk sebagai pemain dan mengisi slot tim yang dipilih.</p>
+
+          <select id="hostTeam">
+            <option value="RED">RED TEAM</option>
+            <option value="BLUE">BLUE TEAM</option>
+          </select>
+
+          <button class="btn primary" id="createRoomBtn">
+            CREATE ROOM <b>↗</b>
+          </button>
+
+          <p class="hint" id="createRoomHint">
+            Host otomatis masuk sebagai pemain dan mengisi slot tim yang dipilih.
+          </p>
+
         </div>
 
+        <!-- JOIN ROOM -->
         <div class="room-action-card">
+
           <p class="eyebrow">JOIN AN OPERATION</p>
           <h3>Join by Code</h3>
+
           <label for="joinRoomCode">ROOM CODE</label>
-          <input id="joinRoomCode" maxlength="8" placeholder="Contoh: 1F6B49C2" autocomplete="off">
+
+          <input
+            id="joinRoomCode"
+            maxlength="8"
+            placeholder="Contoh: 1F6B49C2"
+            autocomplete="off"
+          >
+
           <label for="joinTeam">PILIH TIM</label>
-          <select id="joinTeam"><option value="RED">RED TEAM</option><option value="BLUE">BLUE TEAM</option></select>
-          <button class="btn primary" id="joinRoomBtn">JOIN ROOM <b>↗</b></button>
-          <p class="hint" id="joinRoomHint">Masukkan kode room dari host.</p>
+
+          <select id="joinTeam">
+            <option value="RED">RED TEAM</option>
+            <option value="BLUE">BLUE TEAM</option>
+          </select>
+
+          <button class="btn primary" id="joinRoomBtn">
+            JOIN ROOM <b>↗</b>
+          </button>
+
+          <p class="hint" id="joinRoomHint">
+            Masukkan kode room dari host.
+          </p>
+
         </div>
+
       </div>
 
       <div class="room-list-head">
-        <div><p class="eyebrow">AVAILABLE OPERATIONS</p><h3>Room Browser</h3></div>
-        <button type="button" class="btn outline" id="refreshRoomsBtn">REFRESH</button>
+        <div>
+          <p class="eyebrow">AVAILABLE OPERATIONS</p>
+          <h3>Room Browser</h3>
+        </div>
+
+        <button type="button" class="btn outline" id="refreshRoomsBtn">
+          REFRESH
+        </button>
       </div>
+
       <div id="roomList" class="room-list">
         <p class="hint">Memuat daftar room...</p>
       </div>
+
       <p class="hint" id="roomListHint"></p>
-      <div class="lobby-bottom"><span>PLAYER <b id="roomPlayerName">CONNECTED</b></span><button class="btn outline" id="roomLogoutBtn">LOG OUT</button></div>
+
+      <div class="lobby-bottom">
+        <span>PLAYER <b id="roomPlayerName">CONNECTED</b></span>
+        <button class="btn outline" id="roomLogoutBtn">LOG OUT</button>
+      </div>
+
     </section>
 
+    <!-- ================================== -->
     <!-- TEAM SELECTION -->
+    <!-- ================================== -->
+
     <section id="teamPanel" class="panel hidden">
+
       <div class="section-head">
         <div>
           <p class="eyebrow">SQUAD ASSIGNMENT</p>
@@ -218,34 +333,45 @@
       <p class="welcome-line" id="welcomeText"></p>
 
       <div class="teams">
+
         <button class="team-card red" data-team="RED">
           <span class="team-symbol">R</span>
+
           <span>
             <small>FACTION 01</small>
             <strong>RED TEAM</strong>
             <em>IRON / ATTACK</em>
           </span>
+
           <b>↗</b>
         </button>
 
         <button class="team-card blue" data-team="BLUE">
           <span class="team-symbol">B</span>
+
           <span>
             <small>FACTION 02</small>
             <strong>BLUE TEAM</strong>
             <em>STEEL / DEFENSE</em>
           </span>
+
           <b>↗</b>
         </button>
+
       </div>
 
       <p class="hint" id="teamHint">
         Pilih satu tim untuk melanjutkan ke waiting lobby.
       </p>
+
     </section>
 
+    <!-- ================================== -->
     <!-- WAITING LOBBY -->
+    <!-- ================================== -->
+
     <section id="lobbyPanel" class="panel hidden">
+
       <div class="section-head">
         <div>
           <p class="eyebrow">DEPLOYMENT LOBBY</p>
@@ -258,10 +384,12 @@
           <small>ROOM CODE</small>
           <strong id="lobbyRoomCode">--------</strong>
         </div>
+
         <span>SHARE THIS CODE WITH YOUR TEAM</span>
       </div>
 
       <div class="lobby-grid">
+
         <div>
           <small class="muted">YOUR ASSIGNMENT</small>
           <div class="assignment" id="assignment">—</div>
@@ -273,6 +401,7 @@
           <strong id="lobbyState">WAITING</strong>
           <small>Admin belum memulai pertandingan.</small>
         </div>
+
       </div>
 
       <div class="lobby-teams" id="lobbyTeams"></div>
@@ -280,233 +409,960 @@
       <p class="hint" id="lobbyHint"></p>
 
       <div class="lobby-bottom">
+
         <span>PLAYER STATUS <b>CONNECTED</b></span>
 
         <div class="lobby-actions">
-          <button class="btn outline" id="leaveTeamBtn">LEAVE TEAM</button>
-          <button class="btn outline" id="leaveBtn">LOG OUT</button>
+          <button class="btn outline" id="leaveTeamBtn">
+            LEAVE TEAM
+          </button>
+
+          <button class="btn outline" id="leaveBtn">
+            LOG OUT
+          </button>
         </div>
+
       </div>
+
     </section>
 
+    <!-- ================================== -->
     <!-- GAMEPLAY CAMERA -->
+    <!-- ================================== -->
+
     <section id="gameplayPanel" class="gameplay-panel hidden">
-      <div id="baseDefenseNotification" class="base-defense-notification hidden" role="alert" aria-live="assertive">
+
+      <!-- BASE DEFENSE NOTIFICATION -->
+      <div
+        id="baseDefenseNotification"
+        class="base-defense-notification hidden"
+        role="alert"
+        aria-live="assertive"
+      >
+
         <span class="base-defense-notification-icon">!</span>
-        <div><strong id="baseDefenseNotificationTitle">BASE UNDER ATTACK</strong><p id="baseDefenseNotificationMessage">Tim lawan sedang mencoba menonaktifkan base kalian.</p></div>
-        <button type="button" id="closeBaseDefenseNotification" aria-label="Tutup notifikasi">×</button>
+
+        <div>
+          <strong id="baseDefenseNotificationTitle">
+            BASE UNDER ATTACK
+          </strong>
+
+          <p id="baseDefenseNotificationMessage">
+            Tim lawan sedang mencoba menonaktifkan base kalian.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          id="closeBaseDefenseNotification"
+          aria-label="Tutup notifikasi"
+        >×</button>
+
       </div>
+
+      <!-- GAMEPLAY TOPBAR -->
       <div class="gameplay-topbar" aria-hidden="true">
+
         <div>
           <p class="eyebrow">LIVE OPERATION</p>
           <strong id="gameplayMatchName">OPERATION: SURABAYA</strong>
         </div>
+
         <div class="gameplay-topbar-right">
+
           <div class="match-timer-card realtime-clock-card">
             <small>LOCAL TIME</small>
             <strong id="gameplayTimer">--:--:--</strong>
             <span id="gameplayTimerStatus">REAL-TIME CLOCK</span>
           </div>
+
         </div>
+
       </div>
 
+      <!-- CAMERA STAGE -->
       <div class="camera-stage">
+
         <video id="gameplayCamera" autoplay playsinline muted></video>
-        <div id="crosshair" class="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i><b></b></div>
-        <div id="gunBox" class="gun-box hidden"><span id="gunBoxLabel">ENEMY</span></div>
-        <div class="target-picker" hidden><span id="gunStatus" class="gun-status">SCANNING...</span><select id="targetSelect" aria-label="Pilih target musuh"><option value="">TARGET: -</option></select></div>
-        <div id="cameraPlaceholder" class="camera-placeholder">
-          <div class="camera-symbol">◉</div>
-          <strong>KAMERA BELUM AKTIF</strong>
-          <p id="cameraMessage">Izinkan akses kamera untuk masuk ke area permainan.</p>
-          <button type="button" id="enableCameraBtn" class="camera-action">AKTIFKAN KAMERA</button>
+
+        <!-- CROSSHAIR -->
+        <div id="crosshair" class="crosshair" aria-hidden="true">
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <b></b>
         </div>
-        <!-- HUD KANAN ATAS: status GPS/CAM + tim + menu -->
+
+        <!-- ENEMY DETECTION -->
+        <div id="gunBox" class="gun-box hidden">
+          <span id="gunBoxLabel">ENEMY</span>
+        </div>
+
+        <div class="target-picker" hidden>
+          <span id="gunStatus" class="gun-status">SCANNING...</span>
+
+          <select id="targetSelect" aria-label="Pilih target musuh">
+            <option value="">TARGET: -</option>
+          </select>
+        </div>
+
+        <!-- CAMERA PLACEHOLDER -->
+        <div id="cameraPlaceholder" class="camera-placeholder">
+
+          <div class="camera-symbol">◉</div>
+
+          <strong>KAMERA BELUM AKTIF</strong>
+
+          <p id="cameraMessage">
+            Izinkan akses kamera untuk masuk ke area permainan.
+          </p>
+
+          <button type="button" id="enableCameraBtn" class="camera-action">
+            AKTIFKAN KAMERA
+          </button>
+
+        </div>
+
+        <!-- HUD TOP RIGHT -->
         <div class="hud-topright">
+
           <div class="hud-status-pill" id="hudStatusPill">
-            <span id="gpsStatus" class="camera-status hud-dot" data-label="GPS" data-state="warn">GPS STANDBY</span>
-            <span id="cameraStatus" class="camera-status hud-dot" data-label="CAM" data-state="warn">CAMERA STANDBY</span>
-            <span id="gameplayTeamBadge" class="team-badge">TEAM</span>
+
+            <span
+              id="gpsStatus"
+              class="camera-status hud-dot"
+              data-label="GPS"
+              data-state="warn"
+            >
+              GPS STANDBY
+            </span>
+
+            <span
+              id="cameraStatus"
+              class="camera-status hud-dot"
+              data-label="CAM"
+              data-state="warn"
+            >
+              CAMERA STANDBY
+            </span>
+
+            <span id="gameplayTeamBadge" class="team-badge">
+              TEAM
+            </span>
+
           </div>
-          <div class="gameplay-action-dropdown" id="gameplayActionDropdown">
-            <button type="button" id="gameActionsToggle" class="game-actions-toggle hud-menu-btn" aria-label="Menu permainan" aria-expanded="false" aria-controls="gameplayActionMenu">
+
+          <!-- GAME ACTION MENU -->
+          <div
+            class="gameplay-action-dropdown"
+            id="gameplayActionDropdown"
+          >
+
+            <button
+              type="button"
+              id="gameActionsToggle"
+              class="game-actions-toggle hud-menu-btn"
+              aria-label="Menu permainan"
+              aria-expanded="false"
+              aria-controls="gameplayActionMenu"
+            >
               <span class="game-actions-icon" aria-hidden="true">☰</span>
             </button>
-            <div class="gameplay-action-menu hidden" id="gameplayActionMenu">
+
+            <div
+              class="gameplay-action-menu hidden"
+              id="gameplayActionMenu"
+            >
+
               <div class="gameplay-action-stack">
-                <small id="gameplayPlayerInfo" class="menu-player">PLAYER · TEAM</small>
-                <button type="button" id="scanWeaponQrBtn" class="weapon-scan-button"><span>01</span> SCAN QR UPGRADE</button>
-                <button type="button" id="scanGhostQrBtn" class="ghost-scan-button"><span>02</span> GHOST MODE</button>
-                <button type="button" id="openHealingBtn" class="healing-open-button"><span>03</span> BASE HEALING</button>
-                <button type="button" id="scanBaseShutdownBtn" class="base-shutdown-button"><span>04</span> SHUTDOWN BASE</button>
-                <button type="button" id="fullscreenBtn" class="menu-util-button"><span>05</span> LAYAR PENUH</button>
-                <button type="button" id="gameplayLogoutBtn" class="menu-logout-button"><span>06</span> LOG OUT</button>
-                <span id="weaponScanStatus" class="weapon-scan-status" aria-live="polite"></span>
+
+                <small id="gameplayPlayerInfo" class="menu-player">
+                  PLAYER · TEAM
+                </small>
+
+                <button
+                  type="button"
+                  id="scanWeaponQrBtn"
+                  class="weapon-scan-button"
+                >
+                  <span>01</span> SCAN QR UPGRADE
+                </button>
+
+                <button
+                  type="button"
+                  id="scanGhostQrBtn"
+                  class="ghost-scan-button"
+                >
+                  <span>02</span> GHOST MODE
+                </button>
+
+                <button
+                  type="button"
+                  id="openHealingBtn"
+                  class="healing-open-button"
+                >
+                  <span>03</span> BASE HEALING
+                </button>
+
+                <button
+                  type="button"
+                  id="scanBaseShutdownBtn"
+                  class="base-shutdown-button"
+                >
+                  <span>04</span> SHUTDOWN BASE
+                </button>
+
+                <button
+                  type="button"
+                  id="fullscreenBtn"
+                  class="menu-util-button"
+                >
+                  <span>05</span> LAYAR PENUH
+                </button>
+
+                <button
+                  type="button"
+                  id="gameplayLogoutBtn"
+                  class="menu-logout-button"
+                >
+                  <span>06</span> LOG OUT
+                </button>
+
+                <span
+                  id="weaponScanStatus"
+                  class="weapon-scan-status"
+                  aria-live="polite"
+                ></span>
+
               </div>
+
             </div>
+
           </div>
+
         </div>
-        <!-- HUD KIRI ATAS: HP + senjata (ringkas) -->
+
+        <!-- HUD LEFT: HEALTH + WEAPON -->
         <div class="gameplay-left-panel">
+
           <div class="gameplay-health">
-            <div class="health-info"><span>HP</span><strong id="gameplayHealthText">100 / 100</strong></div>
-            <div class="health-bar"><div id="gameplayHealthFill" class="health-fill"></div></div>
-            <span id="gameplayHealthStatus" class="health-status">ALIVE</span>
-            <div id="ghostModeIndicator" class="ghost-mode-indicator hidden" aria-live="polite"><span class="ghost-mode-dot"></span> GHOST MODE <strong id="ghostModeCountdown">00:30</strong></div>
+
+            <div class="health-info">
+              <span>HP</span>
+              <strong id="gameplayHealthText">100 / 100</strong>
+            </div>
+
+            <div class="health-bar">
+              <div id="gameplayHealthFill" class="health-fill"></div>
+            </div>
+
+            <span id="gameplayHealthStatus" class="health-status">
+              ALIVE
+            </span>
+
+            <div
+              id="ghostModeIndicator"
+              class="ghost-mode-indicator hidden"
+              aria-live="polite"
+            >
+              <span class="ghost-mode-dot"></span>
+              GHOST MODE
+              <strong id="ghostModeCountdown">00:30</strong>
+            </div>
+
           </div>
+
+          <!-- WEAPON HUD -->
           <div class="weapon-hud" id="weaponHud">
-            <div class="weapon-hud-main"><span class="weapon-kicker">EQUIPPED WEAPON</span><strong id="weaponName">TACTICAL RIFLE MK-1</strong><span id="weaponLevel">WEAPON LEVEL 1</span></div>
-            <div class="weapon-damage"><strong id="weaponDamage">10</strong><span>DAMAGE / SHOT</span></div>
+
+            <div class="weapon-hud-main">
+              <span class="weapon-kicker">EQUIPPED WEAPON</span>
+              <strong id="weaponName">TACTICAL RIFLE MK-1</strong>
+              <span id="weaponLevel">WEAPON LEVEL 1</span>
+            </div>
+
+            <div class="weapon-damage">
+              <strong id="weaponDamage">10</strong>
+              <span>DAMAGE / SHOT</span>
+            </div>
+
           </div>
+
         </div>
+
       </div>
 
+      <!-- ================================== -->
       <!-- PLAYER ELIMINATED OVERLAY -->
+      <!-- ================================== -->
+
       <div id="eliminatedOverlay" class="eliminated-overlay hidden">
+
         <div class="eliminated-content">
-          <span class="eliminated-tag">OPERATION TERMINATED</span>
+
+          <span class="eliminated-tag">
+            OPERATION TERMINATED
+          </span>
+
           <h1>YOU ARE ELIMINATED</h1>
+
           <p>YOUR HEALTH HAS REACHED ZERO</p>
+
           <div class="eliminated-line"></div>
-          <span class="eliminated-status">PLAYER STATUS: ELIMINATED</span>
+
+          <span class="eliminated-status">
+            PLAYER STATUS: ELIMINATED
+          </span>
+
         </div>
+
       </div>
 
+      <!-- ================================== -->
+      <!-- MATCH RESULT OVERLAY -->
+      <!-- ================================== -->
+
+      <div
+        id="matchResultOverlay"
+        class="match-result-overlay hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="matchResultTitle"
+      >
+
+        <div id="matchResultCard" class="match-result-card">
+
+          <!-- RESULT BANNER -->
+          <div class="match-result-banner">
+
+            <div>
+              <h2 id="matchResultTitle">MATCH SELESAI</h2>
+              <p id="matchResultReason">Menghitung hasil...</p>
+            </div>
+
+            <div class="match-result-duration">
+              <strong id="matchResultDuration">--:--</strong>
+              <span>DURASI</span>
+            </div>
+
+          </div>
+
+          <!-- RESULT GRID -->
+          <div class="match-result-grid">
+
+            <!-- PLAYER STATISTICS -->
+            <section class="match-result-box">
+
+              <h3>STATISTIKMU</h3>
+
+              <div class="match-stat-grid">
+
+                <div>
+                  <strong id="resultShots">-</strong>
+                  <span>TEMBAKAN</span>
+                </div>
+
+                <div>
+                  <strong id="resultAccuracy">-</strong>
+                  <span>AKURASI</span>
+                </div>
+
+                <div>
+                  <strong id="resultHits">-</strong>
+                  <span>HIT</span>
+                </div>
+
+                <div>
+                  <strong id="resultReceived">-</strong>
+                  <span>DITERIMA</span>
+                </div>
+
+                <div>
+                  <strong id="resultHeal">-</strong>
+                  <span>HEAL</span>
+                </div>
+
+                <div>
+                  <strong id="resultDistance">-</strong>
+                  <span>JARAK</span>
+                </div>
+
+              </div>
+
+            </section>
+
+            <!-- SCOREBOARD -->
+            <section class="match-result-box">
+
+              <h3>SCOREBOARD</h3>
+
+              <ul id="matchScoreboard" class="match-scoreboard"></ul>
+
+              <p class="match-scoreboard-note">
+                hit diberikan
+              </p>
+
+            </section>
+
+          </div>
+
+          <!-- MATCH DETAIL TABLE -->
+          <div id="matchResultDetail" class="match-result-detail hidden">
+
+            <div class="match-detail-scroll">
+
+              <table>
+
+                <thead>
+                  <tr>
+                    <th>PEMAIN</th>
+                    <th>TIM</th>
+                    <th>TEMBAK</th>
+                    <th>HIT</th>
+                    <th>DITERIMA</th>
+                    <th>AKURASI</th>
+                    <th>HEAL</th>
+                    <th>JARAK</th>
+                  </tr>
+                </thead>
+
+                <tbody id="matchResultDetailBody"></tbody>
+
+              </table>
+
+            </div>
+
+          </div>
+
+          <!-- RESULT ERROR -->
+          <p
+            id="matchResultError"
+            class="match-result-error hidden"
+          ></p>
+
+          <!-- RESULT ACTIONS -->
+          <div class="match-result-actions">
+
+            <button
+              type="button"
+              id="matchResultDetailBtn"
+              class="match-result-btn outline"
+            >
+              LIHAT DETAIL
+            </button>
+
+            <button
+              type="button"
+              id="matchResultLobbyBtn"
+              class="match-result-btn primary"
+            >
+              KEMBALI KE LOBBY
+            </button>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- GAMEPLAY CONTROLS -->
       <div class="gameplay-controls">
+
         <button type="button" id="shootBtn" class="shoot-button">
           <span class="shoot-icon">◎</span>
           <span class="shoot-label">FIRE</span>
         </button>
+
       </div>
+
+      <!-- GAMEPLAY FOOTER -->
       <div class="gameplay-footer" aria-hidden="true">
-        <span>OPERATION STATUS <b id="gameplayStatus">ACTIVE</b></span>
+
+        <span>
+          OPERATION STATUS
+          <b id="gameplayStatus">ACTIVE</b>
+        </span>
+
       </div>
+
     </section>
 
-    <!-- CROSS-BROWSER WEAPON QR SCANNER -->
-    <div id="weaponQrModal" class="weapon-qr-modal hidden" role="dialog" aria-modal="true" aria-labelledby="weaponQrTitle">
+    <!-- ================================== -->
+    <!-- WEAPON UPGRADE QR SCANNER -->
+    <!-- ================================== -->
+
+    <div
+      id="weaponQrModal"
+      class="weapon-qr-modal hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="weaponQrTitle"
+    >
+
       <div class="weapon-qr-dialog">
+
         <div class="weapon-qr-head">
-          <div><span class="weapon-kicker">FIELD EQUIPMENT</span><h2 id="weaponQrTitle">WEAPON UPGRADE SCANNER</h2></div>
-          <button type="button" id="closeWeaponQrBtn" class="weapon-qr-close" aria-label="Tutup scanner">×</button>
+
+          <div>
+            <span class="weapon-kicker">FIELD EQUIPMENT</span>
+            <h2 id="weaponQrTitle">WEAPON UPGRADE SCANNER</h2>
+          </div>
+
+          <button
+            type="button"
+            id="closeWeaponQrBtn"
+            class="weapon-qr-close"
+            aria-label="Tutup scanner"
+          >×</button>
+
         </div>
-        <p class="weapon-qr-help">Arahkan kamera ke QR Code Weapon Upgrade Station.</p>
+
+        <p class="weapon-qr-help">
+          Arahkan kamera ke QR Code Weapon Upgrade Station.
+        </p>
+
         <div id="weaponQrReader"></div>
-        <div class="weapon-qr-divider"><span>ATAU</span></div>
-        <label class="weapon-qr-file-label" for="weaponQrFile">PILIH GAMBAR QR DARI GALERI / FILE</label>
-        <input id="weaponQrFile" type="file" accept="image/*" capture="environment">
-        <p id="weaponQrModalStatus" class="weapon-qr-modal-status" aria-live="polite">Menyiapkan scanner...</p>
-        <button type="button" id="cancelWeaponQrBtn" class="weapon-qr-cancel">BATALKAN</button>
+
+        <div class="weapon-qr-divider">
+          <span>ATAU</span>
+        </div>
+
+        <label class="weapon-qr-file-label" for="weaponQrFile">
+          PILIH GAMBAR QR DARI GALERI / FILE
+        </label>
+
+        <input
+          id="weaponQrFile"
+          type="file"
+          accept="image/*"
+          capture="environment"
+        >
+
+        <p
+          id="weaponQrModalStatus"
+          class="weapon-qr-modal-status"
+          aria-live="polite"
+        >
+          Menyiapkan scanner...
+        </p>
+
+        <button
+          type="button"
+          id="cancelWeaponQrBtn"
+          class="weapon-qr-cancel"
+        >
+          BATALKAN
+        </button>
+
       </div>
+
     </div>
 
-    <!-- BASE HEALING QR + POSE MENU -->
-    <div id="healingQrModal" class="weapon-qr-modal hidden" role="dialog" aria-modal="true" aria-labelledby="healingQrTitle">
+    <!-- ================================== -->
+    <!-- BASE HEALING QR -->
+    <!-- ================================== -->
+
+    <div
+      id="healingQrModal"
+      class="weapon-qr-modal hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="healingQrTitle"
+    >
+
       <div class="weapon-qr-dialog">
+
         <div class="weapon-qr-head">
-          <div><span class="weapon-kicker">BASE SUPPORT</span><h2 id="healingQrTitle">BASE HEALING</h2></div>
-          <button type="button" id="closeHealingQrBtn" class="weapon-qr-close" aria-label="Tutup healing">×</button>
+
+          <div>
+            <span class="weapon-kicker">BASE SUPPORT</span>
+            <h2 id="healingQrTitle">BASE HEALING</h2>
+          </div>
+
+          <button
+            type="button"
+            id="closeHealingQrBtn"
+            class="weapon-qr-close"
+            aria-label="Tutup healing"
+          >×</button>
+
         </div>
-        <p class="weapon-qr-help">Scan QR di base tim sendiri untuk membuka menu healing.</p>
+
+        <p class="weapon-qr-help">
+          Scan QR di base tim sendiri untuk membuka menu healing.
+        </p>
+
         <div id="healingQrReader"></div>
-        <div class="weapon-qr-divider"><span>ATAU</span></div>
-        <label class="weapon-qr-file-label" for="healingQrFile">PILIH GAMBAR QR DARI GALERI / FILE</label>
-        <input id="healingQrFile" type="file" accept="image/*" capture="environment">
-        <section id="healingMenu" class="healing-menu hidden">
-          <strong>HEALING STATION TERVERIFIKASI</strong>
-          <p id="healingPoseInstruction">Aktifkan pose detection dan lakukan pose healing yang telah ditentukan.</p>
-          <div id="healingPoseStatus" class="weapon-qr-modal-status" aria-live="polite">Menunggu pose healing...</div>
-          <div class="healing-progress"><div id="healingProgressFill"></div></div>
-          <span id="healingCountdown">POSE BELUM TERDETEKSI</span>
-        </section>
-        <p id="healingQrStatus" class="weapon-qr-modal-status" aria-live="polite">Menunggu QR Healing Base...</p>
-        <button type="button" id="cancelHealingQrBtn" class="weapon-qr-cancel">TUTUP</button>
-      </div>
-    </div>
 
-    <!-- BASE SHUTDOWN QR SCANNER -->
-    <div id="baseShutdownModal" class="weapon-qr-modal hidden" role="dialog" aria-modal="true" aria-labelledby="baseShutdownTitle">
-      <div class="weapon-qr-dialog">
-        <div class="weapon-qr-head"><div><span class="weapon-kicker">ENEMY OBJECTIVE</span><h2 id="baseShutdownTitle">BASE SHUTDOWN</h2></div><button type="button" id="closeBaseShutdownBtn" class="weapon-qr-close" aria-label="Tutup scanner">×</button></div>
-        <p class="weapon-qr-help">Scan QR di base lawan. Proses shutdown membutuhkan waktu dan akan mengakhiri pertandingan jika berhasil.</p>
-        <div id="baseShutdownReader"></div>
-        <div class="weapon-qr-divider"><span>ATAU</span></div>
-        <label class="weapon-qr-file-label" for="baseShutdownFile">PILIH GAMBAR QR DARI GALERI / FILE</label>
-        <input id="baseShutdownFile" type="file" accept="image/*" capture="environment">
-        <p id="baseShutdownStatus" class="weapon-qr-modal-status" aria-live="polite">Menunggu QR Base Shutdown...</p>
-        <div id="baseShutdownCountdown" class="base-shutdown-countdown hidden">10</div>
-        <button type="button" id="cancelBaseShutdownBtn" class="weapon-qr-cancel">BATALKAN</button>
-      </div>
-    </div>
-
-    <!-- GHOST MODE TREASURE QR SCANNER -->
-    <div id="ghostQrModal" class="weapon-qr-modal hidden" role="dialog" aria-modal="true" aria-labelledby="ghostQrTitle">
-      <div class="weapon-qr-dialog">
-        <div class="weapon-qr-head">
-          <div><span class="weapon-kicker">HIDDEN FIELD STATION</span><h2 id="ghostQrTitle">GHOST MODE SCANNER</h2></div>
-          <button type="button" id="closeGhostQrBtn" class="weapon-qr-close" aria-label="Tutup scanner">×</button>
+        <div class="weapon-qr-divider">
+          <span>ATAU</span>
         </div>
-        <p class="weapon-qr-help">Scan QR Ghost Mode di lokasi khusus untuk mendapatkan kekebalan sementara. Kamu tetap bisa menembak selama efek aktif.</p>
-        <div id="ghostQrReader"></div>
-        <div class="weapon-qr-divider"><span>ATAU</span></div>
-        <label class="weapon-qr-file-label" for="ghostQrFile">PILIH GAMBAR QR DARI GALERI / FILE</label>
-        <input id="ghostQrFile" type="file" accept="image/*" capture="environment">
-        <p id="ghostQrModalStatus" class="weapon-qr-modal-status" aria-live="polite">Menyiapkan scanner...</p>
-        <button type="button" id="cancelGhostQrBtn" class="weapon-qr-cancel">BATALKAN</button>
+
+        <label class="weapon-qr-file-label" for="healingQrFile">
+          PILIH GAMBAR QR DARI GALERI / FILE
+        </label>
+
+        <input
+          id="healingQrFile"
+          type="file"
+          accept="image/*"
+          capture="environment"
+        >
+
+        <!-- HEALING MENU -->
+        <section id="healingMenu" class="healing-menu hidden">
+
+          <strong>HEALING STATION TERVERIFIKASI</strong>
+
+          <p id="healingPoseInstruction">
+            Aktifkan pose detection dan lakukan pose healing yang telah ditentukan.
+          </p>
+
+          <div
+            id="healingPoseStatus"
+            class="weapon-qr-modal-status"
+            aria-live="polite"
+          >
+            Menunggu pose healing...
+          </div>
+
+          <div class="healing-progress">
+            <div id="healingProgressFill"></div>
+          </div>
+
+          <span id="healingCountdown">
+            POSE BELUM TERDETEKSI
+          </span>
+
+        </section>
+
+        <p
+          id="healingQrStatus"
+          class="weapon-qr-modal-status"
+          aria-live="polite"
+        >
+          Menunggu QR Healing Base...
+        </p>
+
+        <button
+          type="button"
+          id="cancelHealingQrBtn"
+          class="weapon-qr-cancel"
+        >
+          TUTUP
+        </button>
+
       </div>
+
     </div>
 
-    <!-- TACTICAL COMMS / SQUAD AI RADIO (OTOMATIS MUNCUL SAAT ROOM & TIM DIPILIH) -->
-    <section id="commsPlayerPanel" class="panel hidden" style="margin-top:18px;">
-      <div class="section-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+    <!-- ================================== -->
+    <!-- BASE SHUTDOWN QR -->
+    <!-- ================================== -->
+
+    <div
+      id="baseShutdownModal"
+      class="weapon-qr-modal hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="baseShutdownTitle"
+    >
+
+      <div class="weapon-qr-dialog">
+
+        <div class="weapon-qr-head">
+
+          <div>
+            <span class="weapon-kicker">ENEMY OBJECTIVE</span>
+            <h2 id="baseShutdownTitle">BASE SHUTDOWN</h2>
+          </div>
+
+          <button
+            type="button"
+            id="closeBaseShutdownBtn"
+            class="weapon-qr-close"
+            aria-label="Tutup scanner"
+          >×</button>
+
+        </div>
+
+        <p class="weapon-qr-help">
+          Scan QR di base lawan. Proses shutdown membutuhkan waktu
+          dan akan mengakhiri pertandingan jika berhasil.
+        </p>
+
+        <div id="baseShutdownReader"></div>
+
+        <div class="weapon-qr-divider">
+          <span>ATAU</span>
+        </div>
+
+        <label class="weapon-qr-file-label" for="baseShutdownFile">
+          PILIH GAMBAR QR DARI GALERI / FILE
+        </label>
+
+        <input
+          id="baseShutdownFile"
+          type="file"
+          accept="image/*"
+          capture="environment"
+        >
+
+        <p
+          id="baseShutdownStatus"
+          class="weapon-qr-modal-status"
+          aria-live="polite"
+        >
+          Menunggu QR Base Shutdown...
+        </p>
+
+        <div id="baseShutdownCountdown" class="base-shutdown-countdown hidden">
+          10
+        </div>
+
+        <button
+          type="button"
+          id="cancelBaseShutdownBtn"
+          class="weapon-qr-cancel"
+        >
+          BATALKAN
+        </button>
+
+      </div>
+
+    </div>
+
+    <!-- ================================== -->
+    <!-- GHOST MODE QR -->
+    <!-- ================================== -->
+
+    <div
+      id="ghostQrModal"
+      class="weapon-qr-modal hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="ghostQrTitle"
+    >
+
+      <div class="weapon-qr-dialog">
+
+        <div class="weapon-qr-head">
+
+          <div>
+            <span class="weapon-kicker">HIDDEN FIELD STATION</span>
+            <h2 id="ghostQrTitle">GHOST MODE SCANNER</h2>
+          </div>
+
+          <button
+            type="button"
+            id="closeGhostQrBtn"
+            class="weapon-qr-close"
+            aria-label="Tutup scanner"
+          >×</button>
+
+        </div>
+
+        <p class="weapon-qr-help">
+          Scan QR Ghost Mode di lokasi khusus untuk mendapatkan
+          kekebalan sementara. Kamu tetap bisa menembak selama efek aktif.
+        </p>
+
+        <div id="ghostQrReader"></div>
+
+        <div class="weapon-qr-divider">
+          <span>ATAU</span>
+        </div>
+
+        <label class="weapon-qr-file-label" for="ghostQrFile">
+          PILIH GAMBAR QR DARI GALERI / FILE
+        </label>
+
+        <input
+          id="ghostQrFile"
+          type="file"
+          accept="image/*"
+          capture="environment"
+        >
+
+        <p
+          id="ghostQrModalStatus"
+          class="weapon-qr-modal-status"
+          aria-live="polite"
+        >
+          Menyiapkan scanner...
+        </p>
+
+        <button
+          type="button"
+          id="cancelGhostQrBtn"
+          class="weapon-qr-cancel"
+        >
+          BATALKAN
+        </button>
+
+      </div>
+
+    </div>
+
+    <!-- ================================== -->
+    <!-- TACTICAL COMMS / SQUAD AI RADIO -->
+    <!-- ================================== -->
+
+    <section
+      id="commsPlayerPanel"
+      class="panel hidden"
+      style="margin-top:18px;"
+    >
+
+      <div
+        class="section-head"
+        style="display:flex;justify-content:space-between;align-items:center;gap:12px;"
+      >
+
         <div>
           <p class="eyebrow">TACTICAL COMMS / SQUAD AI RADIO</p>
           <h2>Team AI Speech-to-Text</h2>
         </div>
+
         <div class="comms-header-actions">
-          <span id="commsPlayerSquadCapacity" style="font:700 11px 'DM Mono',monospace;color:#c7f36b;border:1px solid rgba(199,243,107,0.35);padding:4px 10px;background:rgba(10,16,23,0.8);">ANGGOTA: 0/0</span>
-          <button type="button" id="commsPlayerToggleBtn" class="comms-toggle-btn" title="Sembunyikan/Tampilkan panel chat">MINIMIZE</button>
+
+          <span
+            id="commsPlayerSquadCapacity"
+            style="font:700 11px 'DM Mono',monospace;color:#c7f36b;border:1px solid rgba(199,243,107,0.35);padding:4px 10px;background:rgba(10,16,23,0.8);"
+          >
+            ANGGOTA: 0/0
+          </span>
+
+          <button
+            type="button"
+            id="commsPlayerToggleBtn"
+            class="comms-toggle-btn"
+            title="Sembunyikan/Tampilkan panel chat"
+          >
+            MINIMIZE
+          </button>
+
         </div>
+
       </div>
 
       <div class="comms-collapsible-body">
-        <p class="hint" id="commsPlayerStatus">Menyinkronkan saluran radio tim...</p>
 
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 12px;border:1px solid rgba(199,243,107,0.35);background:rgba(10,16,23,0.8);margin-top:10px;margin-bottom:10px;">
+        <p class="hint" id="commsPlayerStatus">
+          Menyinkronkan saluran radio tim...
+        </p>
+
+        <!-- TEAM RADIO -->
+        <div
+          style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 12px;border:1px solid rgba(199,243,107,0.35);background:rgba(10,16,23,0.8);margin-top:10px;margin-bottom:10px;"
+        >
+
           <div>
-            <strong id="commsPlayerTeamTag" style="font-size:14px;letter-spacing:1px;display:block;">ROOM · TIM</strong>
-            <small style="opacity:0.75;font-size:11px;">🔊 Siaran suara Command Center selalu aktif (tidak dapat di-mute)</small>
+            <strong
+              id="commsPlayerTeamTag"
+              style="font-size:14px;letter-spacing:1px;display:block;"
+            >
+              ROOM · TIM
+            </strong>
+
+            <small style="opacity:0.75;font-size:11px;">
+              🔊 Siaran suara Command Center selalu aktif (tidak dapat di-mute)
+            </small>
           </div>
-          <button type="button" class="btn primary" id="commsPlayerSttBtn">🤖🎙️ MULAI AI SPEECH-TO-TEXT</button>
+
+          <button
+            type="button"
+            class="btn primary"
+            id="commsPlayerSttBtn"
+          >
+            🤖🎙️ MULAI AI SPEECH-TO-TEXT
+          </button>
+
         </div>
 
-        <!-- RINGKASAN JUMLAH ANGGOTA PER TIM DI ROOM -->
-        <div id="commsPlayerAllTeamsBar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>
+        <!-- TEAM SUMMARY -->
+        <div
+          id="commsPlayerAllTeamsBar"
+          style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"
+        ></div>
 
-        <!-- DAFTAR ANGGOTA TIM AKTIF -->
-        <div id="commsPlayerRoster" style="margin-bottom:8px;"></div>
-        <p id="commsPlayerSttPreview" class="hint" style="min-height:18px;color:#c7f36b;margin-bottom:6px;"></p>
+        <!-- TEAM ROSTER -->
+        <div
+          id="commsPlayerRoster"
+          style="margin-bottom:8px;"
+        ></div>
 
-        <div id="commsPlayerChatBox" style="height:190px;overflow-y:auto;border:1px solid rgba(255,255,255,0.12);background:rgba(10,16,23,0.8);padding:8px;margin-bottom:8px;"></div>
+        <!-- SPEECH PREVIEW -->
+        <p
+          id="commsPlayerSttPreview"
+          class="hint"
+          style="min-height:18px;color:#c7f36b;margin-bottom:6px;"
+        ></p>
 
+        <!-- CHAT BOX -->
+        <div
+          id="commsPlayerChatBox"
+          style="height:190px;overflow-y:auto;border:1px solid rgba(255,255,255,0.12);background:rgba(10,16,23,0.8);padding:8px;margin-bottom:8px;"
+        ></div>
+
+        <!-- CHAT INPUT -->
         <div style="display:flex;gap:8px;">
-          <input id="commsPlayerChatInput" maxlength="1000" placeholder="Atau ketik pesan teks ke tim..." style="flex:1;">
-          <button type="button" class="btn primary" id="commsPlayerSendBtn">KIRIM <b>↗</b></button>
+
+          <input
+            id="commsPlayerChatInput"
+            maxlength="1000"
+            placeholder="Atau ketik pesan teks ke tim..."
+            style="flex:1;"
+          >
+
+          <button
+            type="button"
+            class="btn primary"
+            id="commsPlayerSendBtn"
+          >
+            KIRIM <b>↗</b>
+          </button>
+
         </div>
+
       </div>
+
     </section>
+
+    <!-- ================================== -->
+    <!-- FOOTER -->
+    <!-- ================================== -->
 
     <footer>
       <span>FIELD OPS © 2026</span>
       <span>PLAYER PORTAL · BUILD 0.3</span>
     </footer>
+
   </main>
 
+  <!-- ================================== -->
+  <!-- EXTERNAL LIBRARIES -->
+  <!-- ================================== -->
+
   <script src="vendor/face-api.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'"></script>
+
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"
+    onerror="this.onerror=null;this.src='https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'"
+  ></script>
+
+  <!-- MAIN PLAYER SCRIPT -->
   <script src="app.js?v=12"></script>
+
+  <!-- SOCKET.IO -->
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+  <!-- LIVEKIT -->
   <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+
+  <!-- TACTICAL COMMS -->
   <script src="comms-player.js?v=10"></script>
+
 </body>
 </html>

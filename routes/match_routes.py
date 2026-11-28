@@ -104,3 +104,7 @@ def clear_match_events(match_id: str):
 @router.get("/{match_id}/analytics")
 def get_match_analytics(match_id: str):
     return gameplay_controller.get_match_analytics(match_id)
+
+@router.get("/{match_id}/result")
+def get_match_result(match_id: str):
+    return gameplay_controller.get_match_result(match_id)

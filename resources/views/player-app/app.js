@@ -243,23 +243,30 @@ async function startGameplayCamera() {
     if (message) message.textContent = 'Meminta izin akses kamera...';
 
     stopGameplayCamera();
-    stopAuthCamera(); // kamera login wajah harus dilepas dulu, HP biasanya hanya bisa buka 1 kamera
+    stopAuthCamera();
+    // beri waktu OS melepas kamera sebelum dibuka lagi (penting di Android)
+    await new Promise(resolve => setTimeout(resolve, 300));
 
-    try {
-      cameraStream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }
-      });
-    } catch (firstError) {
-      if (firstError.name === 'NotAllowedError' || firstError.name === 'PermissionDeniedError' || firstError.name === 'NotFoundError') throw firstError;
-      // Beri jeda singkat agar kamera sebelumnya benar-benar lepas, lalu coba lagi dengan constraint paling longgar
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      cameraStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+    const constraintAttempts = [
+      { audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+      { audio: false, video: { facingMode: { ideal: 'environment' } } },
+      { audio: false, video: true }
+    ];
+
+    let lastError = null;
+    cameraStream = null;
+    for (const constraints of constraintAttempts) {
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+        break;
+      } catch (err) {
+        lastError = err;
+        // izin ditolak / kamera tidak ada: percuma dicoba ulang dengan constraint lain
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'NotFoundError') break;
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
     }
+    if (!cameraStream) throw lastError || new Error('Kamera tidak tersedia');
 
     if (video) {
       video.srcObject = cameraStream;
@@ -281,9 +288,11 @@ async function startGameplayCamera() {
     } else if (error.name === 'NotFoundError') {
       if (message) message.textContent = 'Kamera tidak ditemukan pada perangkat ini.';
     } else if (error.name === 'NotReadableError' || error.name === 'AbortError') {
-      if (message) message.textContent = 'Kamera sedang dipakai aplikasi/tab lain. Tutup tab lain yang memakai kamera, lalu tekan Aktifkan Kamera.';
+      if (message) message.textContent = 'Kamera sedang dipakai aplikasi/tab lain. Tutup tab atau aplikasi yang memakai kamera, lalu tekan AKTIFKAN KAMERA lagi.';
+    } else if (error.name === 'SecurityError') {
+      if (message) message.textContent = 'Akses kamera diblokir oleh kebijakan keamanan browser/server (' + error.name + ').';
     } else {
-      if (message) message.textContent = 'Kamera gagal diaktifkan (' + (error.name || 'Error') + '). Pastikan halaman menggunakan HTTPS atau localhost.';
+      if (message) message.textContent = 'Kamera gagal diaktifkan (' + (error.name || 'Error') + (error.message ? ': ' + error.message : '') + ').';
     }
     updateShootButtonReadiness();
   }
@@ -1257,13 +1266,11 @@ async function refreshGameplayHealth() {
     syncEnemyTargets(latestMatchPlayers);
 
     // Deteksi jika pertandingan sudah selesai (completed)
-    if (timerResult && timerResult.status === 'completed' && match.status !== 'completed') {
+    if (timerResult && timerResult.status === 'completed') {
       match.status = 'completed';
       $('operationStatus').textContent = 'COMPLETED';
       $('gameplayStatus').textContent = 'COMPLETED';
-      stopGunDetectionLoop();
-      stopGameplayGpsTracking(); // <-- TAMBAHAN
-      persistPortalContext('gameplay');
+      showMatchResult();
       return;
     }
 
@@ -1292,7 +1299,7 @@ async function refreshGameplayHealth() {
     const text = $('gameplayHealthText');
     const status = $('gameplayHealthStatus');
 
-    if (text) text.textContent = `${hp} / ${maxHp}`;
+    if (text) text.textContent = `${hp} / ${maxHp} HP`;
     if (fill) {
       fill.style.width = `${percentage}%`;
       fill.classList.toggle('low', percentage <= 25);
@@ -1328,6 +1335,267 @@ function stopGameplayHealthPolling() {
     healthPollHandle = null;
   }
 }
+
+// ==========================================
+// MATCH RESULT SCREEN
+// ==========================================
+
+let matchResultShownFor = null;   // id match yang hasilnya sudah ditampilkan
+let matchResultLoading = false;
+let matchResultData = null;
+
+function formatMatchDuration(totalSeconds) {
+  if (totalSeconds === null || totalSeconds === undefined || Number.isNaN(Number(totalSeconds))) return '--:--';
+  const total = Math.max(0, Math.floor(Number(totalSeconds)));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const mm = String(m).padStart(2, '0');
+  const ss = String(s).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+function formatResultDistance(meters) {
+  const value = Number(meters) || 0;
+  if (value >= 1000) return `${(value / 1000).toFixed(1).replace('.', ',')} km`;
+  return `${Math.round(value)} m`;
+}
+
+function formatResultAccuracy(percent) {
+  // dibulatkan ke bawah agar 99,9% tidak tampil sebagai 100%
+  return `${Math.floor(Number(percent) || 0)}%`;
+}
+
+function resultPlayerName(entry) {
+  return entry.username || entry.full_name || 'Unknown';
+}
+
+function resetMatchResultView() {
+  $('matchResultCard')?.style.setProperty('--result-color', '#8493a2');
+  $('matchResultTitle').textContent = 'MATCH SELESAI';
+  $('matchResultReason').textContent = 'Menghitung hasil...';
+  $('matchResultDuration').textContent = '--:--';
+  ['resultShots', 'resultAccuracy', 'resultHits', 'resultReceived', 'resultHeal', 'resultDistance']
+    .forEach(id => { const el = $(id); if (el) el.textContent = '-'; });
+  const board = $('matchScoreboard');
+  if (board) board.innerHTML = '';
+  const body = $('matchResultDetailBody');
+  if (body) body.innerHTML = '';
+  $('matchResultDetail')?.classList.add('hidden');
+  const error = $('matchResultError');
+  if (error) { error.textContent = ''; error.classList.add('hidden'); }
+  const detailBtn = $('matchResultDetailBtn');
+  if (detailBtn) { detailBtn.textContent = 'LIHAT DETAIL'; detailBtn.disabled = false; }
+}
+
+function renderMatchResult(result) {
+  const winner = result.winner_team_code ? String(result.winner_team_code).toUpperCase() : null;
+  $('matchResultCard').style.setProperty('--result-color', winner ? teamColor(winner) : '#8493a2');
+  $('matchResultTitle').textContent = winner ? `${winner} WIN` : 'MATCH SELESAI';
+  $('matchResultReason').textContent = result.reason_text || '';
+  $('matchResultDuration').textContent = formatMatchDuration(result.duration_seconds);
+
+  const players = Array.isArray(result.players) ? result.players : [];
+  const mine = players.find(item => String(item.player_id) === String(player?.id));
+
+  $('resultShots').textContent = mine ? mine.total_shots ?? 0 : '-';
+  $('resultAccuracy').textContent = mine ? formatResultAccuracy(mine.accuracy_percent) : '-';
+  $('resultHits').textContent = mine ? mine.total_hit_given ?? 0 : '-';
+  $('resultReceived').textContent = mine ? mine.total_hit_received ?? 0 : '-';
+  $('resultHeal').textContent = mine ? mine.total_heal ?? 0 : '-';
+  $('resultDistance').textContent = mine ? formatResultDistance(mine.distance_meters) : '-';
+
+  // Scoreboard (nama pemain berasal dari input user, jadi pakai textContent, bukan innerHTML)
+  const board = $('matchScoreboard');
+  board.innerHTML = '';
+  if (!players.length) {
+    const empty = document.createElement('li');
+    empty.className = 'match-scoreboard-empty';
+    empty.textContent = 'Belum ada data pemain.';
+    board.appendChild(empty);
+  }
+  players.forEach(entry => {
+    const li = document.createElement('li');
+    if (mine && entry.player_id === mine.player_id) li.classList.add('me');
+
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    dot.style.background = teamColor(String(entry.team_code || '').toUpperCase());
+
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = `${entry.rank} ${resultPlayerName(entry)}`;
+
+    li.append(dot, name);
+
+    if (entry.is_mvp) {
+      const mvp = document.createElement('span');
+      mvp.className = 'mvp';
+      mvp.textContent = 'MVP';
+      li.appendChild(mvp);
+    }
+
+    const score = document.createElement('span');
+    score.className = 'score';
+    score.textContent = entry.total_hit_given ?? 0;
+    li.appendChild(score);
+    board.appendChild(li);
+  });
+
+  // Tabel detail
+  const body = $('matchResultDetailBody');
+  body.innerHTML = '';
+  players.forEach(entry => {
+    const tr = document.createElement('tr');
+    if (mine && entry.player_id === mine.player_id) tr.classList.add('me');
+    [
+      resultPlayerName(entry),
+      entry.team_code || '-',
+      entry.total_shots ?? 0,
+      entry.total_hit_given ?? 0,
+      entry.total_hit_received ?? 0,
+      formatResultAccuracy(entry.accuracy_percent),
+      entry.total_heal ?? 0,
+      formatResultDistance(entry.distance_meters)
+    ].forEach(value => {
+      const td = document.createElement('td');
+      td.textContent = value;
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+}
+
+async function loadMatchResult(matchId) {
+  const error = $('matchResultError');
+  const detailBtn = $('matchResultDetailBtn');
+  try {
+    if (error) { error.textContent = ''; error.classList.add('hidden'); }
+    if (detailBtn) detailBtn.disabled = true;
+    const result = await api(`/api/matches/${matchId}/result`);
+    matchResultData = result;
+    matchResultShownFor = matchId;
+    renderMatchResult(result);
+    if (detailBtn) detailBtn.textContent = 'LIHAT DETAIL';
+    return true;
+  } catch (err) {
+    matchResultData = null;
+    $('matchResultReason').textContent = 'Pertandingan telah selesai.';
+    if (error) {
+      error.textContent = `Statistik gagal dimuat: ${err.message || 'terjadi kesalahan'}`;
+      error.classList.remove('hidden');
+    }
+    if (detailBtn) detailBtn.textContent = 'COBA LAGI';
+    return false;
+  } finally {
+    if (detailBtn) detailBtn.disabled = false;
+  }
+}
+
+async function showMatchResult() {
+  if (!match || !player) return;
+  const matchId = match.id;
+  if (matchResultShownFor === matchId || matchResultLoading) return;
+  matchResultLoading = true;
+
+  try {
+    // Hentikan seluruh aktivitas gameplay (gameplayOpened=false mencegah kamera di-restart oleh scanner QR)
+    gameplayOpened = false;
+    stopGameplayHealthPolling();
+    stopGunDetectionLoop();
+    stopGameplayGpsTracking();
+    stopGameplayCamera();
+    stopBaseShutdownNotificationPolling();
+    if (ghostModeTickHandle) { clearInterval(ghostModeTickHandle); ghostModeTickHandle = null; }
+    stopGameplayTimer();
+    await Promise.allSettled([
+      stopWeaponQrScanner(false),
+      stopGhostQrScanner(false),
+      stopHealingQrScanner(false),
+      stopBaseShutdownScanner(false)
+    ]);
+
+    $('eliminatedOverlay')?.classList.add('hidden');
+    $('baseDefenseNotification')?.classList.remove('visible');
+    match.status = 'completed';
+    $('operationStatus').textContent = 'COMPLETED';
+    $('gameplayStatus').textContent = 'COMPLETED';
+    persistPortalContext('gameplay');
+
+    matchResultData = null;
+    resetMatchResultView();
+    $('matchResultOverlay').classList.remove('hidden');
+    await loadMatchResult(matchId);
+  } finally {
+    matchResultLoading = false;
+  }
+}
+
+async function returnToLobbyAfterMatch() {
+  const button = $('matchResultLobbyBtn');
+  if (button) button.disabled = true;
+  try {
+    $('matchResultOverlay').classList.add('hidden');
+    matchResultData = null;
+
+    stopGameplayHealthPolling();
+    stopGameplayGpsTracking();
+    stopGameplayCamera();
+    if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+    gameplayOpened = false;
+    shootCooldown = false;
+    playerEliminated = false;
+
+    if (document.fullscreenElement) {
+      try { await document.exitFullscreen(); } catch (_) {}
+    }
+
+    const shootButton = $('shootBtn');
+    if (shootButton) {
+      shootButton.disabled = false;
+      shootButton.classList.remove('ready-to-fire', 'no-target');
+      const shootLabel = shootButton.querySelector('.shoot-label');
+      if (shootLabel) shootLabel.textContent = 'FIRE';
+    }
+
+    document.body.classList.remove('in-gameplay');
+    $('gameplayPanel').classList.add('hidden');
+    $('loginPanel').classList.add('hidden');
+    $('teamPanel').classList.add('hidden');
+    $('lobbyPanel').classList.add('hidden');
+    $('roomPanel').classList.remove('hidden');
+
+    match = null;
+    window.currentPlayerTeam = null;
+    latestMatchPlayers = [];
+    persistPortalContext('rooms');
+
+    $('operationStatus').textContent = 'ROOM BROWSER';
+    $('roomWelcome').textContent = `Logged in as ${player.full_name} (@${player.username})`;
+    $('roomPlayerName').textContent = `${player.player_number ? `#${player.player_number} · ` : ''}${player.username || player.full_name}`;
+    showRoomHint('roomListHint', 'Pertandingan selesai. Pilih room lain atau buat room baru.');
+    await loadRooms();
+  } catch (error) {
+    console.error('Gagal kembali ke lobby:', error);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+$('matchResultLobbyBtn')?.addEventListener('click', returnToLobbyAfterMatch);
+$('matchResultDetailBtn')?.addEventListener('click', async () => {
+  // tidak ada data (gagal dimuat) -> tombol berfungsi sebagai "coba lagi"
+  if (!matchResultData) {
+    if (match) await loadMatchResult(match.id);
+    return;
+  }
+  const detail = $('matchResultDetail');
+  const button = $('matchResultDetailBtn');
+  const willShow = detail.classList.contains('hidden');
+  detail.classList.toggle('hidden', !willShow);
+  button.textContent = willShow ? 'SEMBUNYIKAN DETAIL' : 'LIHAT DETAIL';
+  if (willShow) detail.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+});
 
 // ==========================================
 // GAMEPLAY WEAPON HUD & QR UPGRADE
@@ -1909,6 +2177,7 @@ async function finishBaseShutdown(payload) {
         stopGameplayGpsTracking(); // <-- TAMBAHAN
         persistPortalContext('gameplay');
         setTimeout(() => stopBaseShutdownScanner(false), 2500);
+        showMatchResult();
       } catch (error) {
         setBaseShutdownStatus(error.message || 'Shutdown gagal.', true);
         baseShutdownInProgress = false;
@@ -1979,9 +2248,9 @@ const gameActionsMenu = $('gameplayActionMenu');
 function setGameActionsDropdown(open) {
   if (!gameActionsDropdown || !gameActionsToggle || !gameActionsMenu) return;
   gameActionsDropdown.classList.toggle('is-open', open);
+  $('gameplayPanel')?.classList.toggle('menu-open', open);
   gameActionsMenu.classList.toggle('hidden', !open);
   gameActionsToggle.setAttribute('aria-expanded', String(open));
-  $('gameplayPanel')?.classList.toggle('menu-open', open);
 }
 gameActionsToggle?.addEventListener('click', (event) => {
   event.stopPropagation();
@@ -2014,6 +2283,7 @@ function classifyHudStatus(text) {
   new MutationObserver(sync).observe(el, { childList: true, characterData: true, subtree: true });
   sync();
 });
+
 
 $('scanWeaponQrBtn').addEventListener('click', startWeaponQrScanner);
 $('scanBaseShutdownBtn').addEventListener('click', startBaseShutdownScanner);
@@ -2172,18 +2442,21 @@ function resetPortal(message) {
 
 let authStream = null;
 let isWebcamReady = false;
+let faceTrackerHandle = null;
+let isFaceApiLoaded = false;
 
+// Lepaskan kamera yang dipakai face login supaya kamera gameplay bisa dibuka.
+// Di Android, getUserMedia kedua akan gagal (NotReadableError) bila stream pertama masih aktif.
 function stopAuthCamera() {
+  if (faceTrackerHandle) { clearInterval(faceTrackerHandle); faceTrackerHandle = null; }
   if (authStream) {
-    authStream.getTracks().forEach((track) => track.stop());
+    authStream.getTracks().forEach(track => track.stop());
     authStream = null;
   }
   isWebcamReady = false;
-  const webcam = $('authWebcam');
+  const webcam = document.getElementById('authWebcam');
   if (webcam) webcam.srcObject = null;
 }
-let faceTrackerHandle = null;
-let isFaceApiLoaded = false;
 
 async function loadFaceTrackerModels() {
   if (typeof faceapi === 'undefined' || isFaceApiLoaded) return;
